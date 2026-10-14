@@ -156,7 +156,7 @@ def main() -> int:
     parser.add_argument("--full-quality-review", action="store_true", help="生成后执行完整视觉扫描和原片/成片对齐图；默认仅做快速技术质检。")
     parser.add_argument("--generation-approved", action="store_true")
     parser.add_argument("--segment-id", type=int, action="append", default=[])
-    parser.add_argument("--max-concurrency", type=int, default=3)
+    parser.add_argument("--max-concurrency", type=int, default=5)
     args = parser.parse_args()
     if not 1 <= args.max_concurrency <= 8:
         parser.error("--max-concurrency 必须介于 1 和 8 之间。")
@@ -321,10 +321,17 @@ def main() -> int:
         submit_errors: list[str] = []
         if new_plans:
             cache_path = root / "analysis" / "reference-upload-cache.json"
+            # Upload each distinct content digest only once across all segments.
+            # Keep a single cache writer and restore original reference order.
+            all_files = [Path(value) for plan in new_plans for value in plan["files"]]
+            uploaded_media = local_video_cli.upload_reference_images(
+                all_files, cache_path=cache_path, max_workers=args.max_concurrency)
+            cursor = 0
             for plan in new_plans:
-                plan["referenceMedia"] = local_video_cli.upload_reference_images(
-                    [Path(value) for value in plan["files"]], cache_path=cache_path)
-                if len(plan["referenceMedia"]) != len(plan["files"]):
+                count = len(plan["files"])
+                plan["referenceMedia"] = uploaded_media[cursor:cursor + count]
+                cursor += count
+                if len(plan["referenceMedia"]) != count:
                     raise ValueError("最终 referenceImages 数量与审计通过的文件数量不一致。")
             for plan in new_plans:
                 generation_manifest.set_video(manifest_path, int(plan["segment"]["segmentId"]), "submit_pending", candidateId=candidate_id, provider=provider, model=model, inputFingerprint=plan["inputFingerprint"])

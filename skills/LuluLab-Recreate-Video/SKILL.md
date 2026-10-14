@@ -200,7 +200,7 @@ python3 scripts/video_cli_preflight.py --manifest <manifest>
 ```text
 python3 scripts/run_generation.py --manifest <manifest> --video-provider lululab_cli --generation-approved
 ```
-原有 ThreadPoolExecutor 保持不变；`--max-concurrency` 默认3，允许1至8。提交前先完成上传与引用审计，任务 ID 返回后立即持久化；恢复时不重新提交。相同 SHA256 媒体仅在有效时复用，缓存无有效期证明时重新校验媒体 URL。
+原有 ThreadPoolExecutor 保持不变；`--max-concurrency` 默认5，允许1至8。提交前先完成上传与引用审计，任务 ID 返回后立即持久化；恢复时不重新提交。各 Segment 素材先统一按 SHA256 去重，最多5路并发上传，保持每段引用顺序；相同 SHA256 媒体仅在有效时复用，缓存无有效期证明时重新校验媒体 URL。
 没有可用LuluLab时保留Prompt和素材并报告CLI问题；不自动换渠道。
 
 每个Segment只提交一次并立即保存返回的画布、节点或任务标识；之后只恢复同一任务。已开始提交后，失败、未知状态、超时、登录或余额异常都不得自动切换到下一家CLI，避免重复付费提交。首次提交必须处于本轮启动确认的授权内；任何重生成均需用户重新授权。

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
@@ -238,17 +239,33 @@ def video_workflow_id() -> str:
     return os.environ.get("LULULAB_VIDEO_WORKFLOW_ID", "").strip() or LULULAB_VIDEO_WORKFLOW_ID
 
 
-def upload_reference_images(files: Iterable[Path], *, cache_path: Path | None = None) -> list[dict[str, Any]]:
-    """Reuse a content-addressed upload only while its media URL is valid."""
+def upload_reference_images(files: Iterable[Path], *, cache_path: Path | None = None, max_workers: int = 1) -> list[dict[str, Any]]:
+    """Upload distinct image contents concurrently; persist the cache from one thread.
+
+    Duplicate SHA-256 inputs share a single upload even across different segment
+    references. Failed uploads never enter the cache, and the original file order
+    is preserved. Existing expiry and HEAD checks remain in effect.
+    """
+    paths = [Path(path) for path in files]
+    if not paths:
+        return []
     cache: dict[str, Any] = {}
     if cache_path and cache_path.is_file():
         try:
-            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            value = json.loads(cache_path.read_text(encoding="utf-8"))
+            if isinstance(value, dict):
+                cache = value
         except (OSError, ValueError):
-            cache = {}
-    result: list[dict[str, Any]] = []
-    for path in files:
+            pass
+    digest_paths: dict[str, Path] = {}
+    ordered: list[str] = []
+    for path in paths:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        digest_paths.setdefault(digest, path)
+        ordered.append(digest)
+
+    def resolve(item: tuple[str, Path]) -> tuple[str, dict[str, Any]]:
+        digest, path = item
         entry = cache.get(digest)
         valid = False
         if isinstance(entry, dict) and str(entry.get("url", "")).startswith("https://"):
@@ -256,7 +273,7 @@ def upload_reference_images(files: Iterable[Path], *, cache_path: Path | None = 
                 expires = datetime.fromisoformat(str(entry["expiredAt"]).replace("Z", "+00:00"))
                 valid = expires.tzinfo is not None and (expires - datetime.now(timezone.utc)).total_seconds() > 300
             except (KeyError, ValueError, TypeError):
-                valid = False
+                pass
             if not valid and not entry.get("expiredAt"):
                 session = _UPLOAD_SESSION_CACHE.get((str(cache_path), digest))
                 valid = bool(session and time.time() - session[0] < 600 and session[1] == entry)
@@ -265,19 +282,33 @@ def upload_reference_images(files: Iterable[Path], *, cache_path: Path | None = 
                         with urlopen(Request(entry["url"], method="HEAD"), timeout=10) as response:
                             valid = 200 <= response.status < 400
                     except (OSError, ValueError):
-                        valid = False
+                        pass
         if not valid:
             entry = media(run_lululab_cli(["upload", str(path)]),
                           "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png")
-            cache[digest] = entry
-            if cache_path:
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                temporary = cache_path.with_suffix(cache_path.suffix + ".tmp")
-                temporary.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
-                temporary.replace(cache_path)
+        return digest, entry
+
+    resolved: dict[str, dict[str, Any]] = {}
+    workers = max(1, min(int(max_workers), 8, len(digest_paths)))
+    if workers == 1:
+        for item in digest_paths.items():
+            digest, entry = resolve(item)
+            resolved[digest] = entry
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(resolve, item) for item in digest_paths.items()]
+            for future in as_completed(futures):
+                digest, entry = future.result()
+                resolved[digest] = entry
+    cache.update(resolved)
+    if cache_path:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = cache_path.with_suffix(cache_path.suffix + ".tmp")
+        temporary.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(cache_path)
+    for digest, entry in resolved.items():
         _UPLOAD_SESSION_CACHE[(str(cache_path), digest)] = (time.time(), entry)
-        result.append(entry)
-    return result
+    return [resolved[digest] for digest in ordered]
 
 
 def run_dreamina_cli(arguments: Sequence[str], *, cli_path: str | os.PathLike[str] | None = None, timeout: float = 600.0) -> Any:

@@ -70,7 +70,7 @@ class RecoveryTests(unittest.TestCase):
     def test_video_upload_preserves_three_reference_types(self):
         with tempfile.TemporaryDirectory() as td:
             files=[Path(td)/name for name in ['board.png','product.jpg','creator.png']]
-            for f in files:f.write_bytes(b'image')
+            for f in files:f.write_bytes(f.name.encode('utf-8'))
             results=[{'url':'https://example.com/'+f.name,'expiresAt':'expiry'} for f in files]+[{'id':'v1'}]
             with patch.object(cli,'run_lululab_cli',side_effect=results) as calls:
                 self.assertEqual(cli.submit_video('lululab_cli','seedance-2-mini','prompt',9,reference_files=files),'v1')
