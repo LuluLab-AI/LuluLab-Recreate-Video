@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_NAME = "recreate-video-agent"
+EXPECTED_NAME = "LuluLab-Recreate-Video"
 REPOSITORY_URL = "https://github.com/LuluLab-AI/LuluLab-Recreate-Video"
 REQUIRED = ("SKILL.md", "README.md", "README.zh-CN.md", "LICENSE", ".gitignore", "scripts/lululab_cli.mjs")
 FORBIDDEN_PARTS = {".venv", ".pytest_cache", "__pycache__", "jobs", "output", "outputs", "dist", "node_modules"}
@@ -18,6 +18,7 @@ SECRET = re.compile(r"-----BEGIN (?:RSA|OPENSSH|EC) PRIVATE KEY-----|\bgh[pousr]
 
 
 def validate() -> None:
+    assert ROOT.name == EXPECTED_NAME, "Skill directory does not match frontmatter name"
     for relative in REQUIRED:
         assert (ROOT / relative).is_file(), f"missing {relative}"
     source = (ROOT / "SKILL.md").read_text(encoding="utf-8")

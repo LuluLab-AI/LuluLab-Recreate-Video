@@ -1,8 +1,8 @@
-# Recreate Video Agent
+# LuluLab-Recreate-Video
 
 ## Overview
 
-This Skill recreates an **authorized** commerce video using a source video, product and creator references, a reviewed segment plan, storyboards and LuluLab generation. It is for creators and merchants with permission to use the source material. The Agent Skills root is this repository's `skills/recreate-video-agent/` folder, containing `SKILL.md`.
+This Skill recreates an **authorized** commerce video using a source video, product and creator references, a reviewed segment plan, storyboards and LuluLab generation. It is for creators and merchants with permission to use the source material. The Agent Skills root is this repository's `skills/LuluLab-Recreate-Video/` folder, containing `SKILL.md`.
 
 ## Key Features
 
@@ -23,11 +23,11 @@ Ask your agent:
 
 > Please install this LuluLab Skill into my current AI agent environment: https://github.com/LuluLab-AI/LuluLab-Recreate-Video . Follow the project's official installation instructions.
 
-The Agent should review the repository, then copy the **whole** `recreate-video-agent/` folder into its current user Skill directory under the name `recreate-video-agent`. Agent locations vary, so confirm the current location in that agent's documentation. Keep `SKILL.md`, `scripts/`, `references/`, `core/`, `utils/` and `assets/` together. Do not copy only `SKILL.md` or the repository's `skills/` wrapper. If the same Skill is already installed, compare versions and ask before replacement; leave other Skills alone. Run `python3 scripts/host_preflight.py`, `node scripts/lululab_cli.mjs --help` and `python3 scripts/video_cli_preflight.py --help` from the Skill root, reload the agent's Skill list, and verify discovery.
+The Agent should review the repository, then copy the **whole** `LuluLab-Recreate-Video/` folder into its current user Skill directory under the name `LuluLab-Recreate-Video`. Agent locations vary, so confirm the current location in that agent's documentation. Keep `SKILL.md`, `scripts/`, `references/`, `core/`, `utils/` and `assets/` together. Do not copy only `SKILL.md` or the repository's `skills/` wrapper. If the same Skill is already installed, compare versions and ask before replacement; leave other Skills alone. Run `python3 scripts/host_preflight.py`, `node scripts/lululab_cli.mjs --help` and `python3 scripts/video_cli_preflight.py --help` from the Skill root, reload the agent's Skill list, and verify discovery.
 
 ## Quick Start
 
-- “Use $recreate-video-agent to recreate this authorized 20-second product video with my new product photos. Show the plan before paid generation.”
+- “Use $LuluLab-Recreate-Video to recreate this authorized 20-second product video with my new product photos. Show the plan before paid generation.”
 - “Recreate this authorized commerce video for an English-speaking US audience, but reply to me in Chinese.”
 
 The first confirmation covers source upload and the initial paid image/video generation; subsequent paid retries require a new decision. See [SKILL.md](SKILL.md).
@@ -44,7 +44,7 @@ English and Chinese interaction follow the Skill's existing language priority ru
 
 | Symptom | Check |
 | --- | --- |
-| Skill is not recognized | Confirm the `recreate-video-agent` root and its `SKILL.md`; reload discovery. |
+| Skill is not recognized | Confirm the `LuluLab-Recreate-Video` root and its `SKILL.md`; reload discovery. |
 | CLI is missing | Check Node.js 20+, `scripts/lululab_cli.mjs`, and `--help`. |
 | API Key is missing | Configure `LULULAB_API_KEY` locally before the first service call. |
 | Network request fails | Check service access and resume the saved task ID before any resubmission. |

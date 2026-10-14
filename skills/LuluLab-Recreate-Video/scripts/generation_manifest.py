@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and update the recreate-video-agent local manifest."""
+"""Create and update the LuluLab-Recreate-Video local manifest."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ except ModuleNotFoundError:
     import service_privacy  # type: ignore[no-redef]
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
-TARGET_SKILL = "recreate-video-agent"
-LEGACY_TARGET_SKILLS = {"recreate-video-system", "recreate-product-video", "recreate-product-video-v4"}
+TARGET_SKILL = "LuluLab-Recreate-Video"
+LEGACY_TARGET_SKILLS = {"recreate-video-agent", "recreate-video-system", "recreate-product-video", "recreate-product-video-v4"}
 ACCEPTED_TARGET_SKILLS = {TARGET_SKILL, *LEGACY_TARGET_SKILLS}
 PROPOSAL_CLASSIFICATIONS = {"skill_actionable", "task_specific", "provider_limited", "insufficient_evidence"}
 PROPOSAL_STATUSES = {"proposal_required", "proposed", "no_change", "applied", "rolled_back", "stale"}
@@ -42,7 +42,7 @@ def file_sha256(path: str | Path) -> str:
 def skill_version(skill_root: str | Path | None = None) -> str:
     source = Path(skill_root or SKILL_ROOT).resolve() / "SKILL.md"
     text = source.read_text(encoding="utf-8")
-    match = re.search(r"^#\s+recreate-video-agent\s+[vV]([^\s]+)", text, re.MULTILINE)
+    match = re.search(r"^#\s+LuluLab-Recreate-Video\s+[vV]([^\s]+)", text, re.MULTILINE)
     if match:
         return match.group(1)
     # SkillHub 发行包会改写 SKILL.md 标题，此时回退到 frontmatter 的 version 字段。

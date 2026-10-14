@@ -129,7 +129,7 @@ def prepare_benchmark_video(
     directory = (
         Path(output_dir).expanduser().resolve()
         if output_dir is not None
-        else Path(tempfile.gettempdir()) / "recreate-video-agent" / "benchmark-uploads"
+        else Path(tempfile.gettempdir()) / "LuluLab-Recreate-Video" / "benchmark-uploads"
     )
     directory.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="compress-", dir=directory))
@@ -241,7 +241,7 @@ def prepare_upload_image(
     directory = (
         Path(output_dir).expanduser().resolve()
         if output_dir is not None
-        else Path(tempfile.gettempdir()) / "recreate-video-agent" / "image-uploads"
+        else Path(tempfile.gettempdir()) / "LuluLab-Recreate-Video" / "image-uploads"
     )
     output = _available_output(source, directory, suffix=".jpg")
     last_error = "FFmpeg 未生成有效文件。"

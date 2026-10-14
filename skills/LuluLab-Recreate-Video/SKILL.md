@@ -1,12 +1,12 @@
 ---
-name: recreate-video-agent
+name: LuluLab-Recreate-Video
 description: Recreate authorized commerce videos with LuluLab CLI across file-based Agent Skills hosts. Keep interaction language independent of target video language.
 license: Apache-2.0
 metadata:
   skillhub:
-    slug: recreate-video-agent
-    version: 1.3.0
-    displayName: Recreate High-Performing Videos / 复刻爆款视频
+    slug: LuluLab-Recreate-Video
+    version: 1.3.1
+    displayName: LuluLab-Recreate-Video
     summary: Recreate commerce videos with multilingual replies across capable agents.
     tags:
       - 视频复刻
@@ -16,7 +16,7 @@ metadata:
     homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# recreate-video-agent v1.3.0
+# LuluLab-Recreate-Video v1.3.1
 
 ## Response language
 

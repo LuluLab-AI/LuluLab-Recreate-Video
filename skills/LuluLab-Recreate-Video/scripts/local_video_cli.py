@@ -637,7 +637,7 @@ def download_media(media_value: Mapping[str, Any] | str, output_path: str | os.P
         destination = requested.with_name(f"{requested.stem}-v{version}{requested.suffix}")
         version += 1
     temporary = destination.with_name(destination.name + ".part")
-    request = Request(str(url), headers={"User-Agent": "recreate-video-agent/local"})
+    request = Request(str(url), headers={"User-Agent": "LuluLab-Recreate-Video/local"})
     try:
         with urlopen(request, timeout=timeout) as response, temporary.open("wb") as output:
             shutil.copyfileobj(response, output)

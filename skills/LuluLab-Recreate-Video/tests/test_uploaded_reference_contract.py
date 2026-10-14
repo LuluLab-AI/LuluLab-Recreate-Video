@@ -172,7 +172,7 @@ class UploadedReferenceContractTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         source = (root / "SKILL.md").read_text(encoding="utf-8")
         self.assertTrue(source.startswith("---\n"))
-        self.assertIn("name: recreate-video-agent", source.split("---", 2)[1])
+        self.assertIn("name: LuluLab-Recreate-Video", source.split("---", 2)[1])
         self.assertTrue((root / "scripts" / "host_preflight.py").is_file())
         self.assertTrue((root / "scripts" / "lululab_cli.mjs").is_file())
 

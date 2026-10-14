@@ -1,0 +1,4 @@
+interface:
+  display_name: "LuluLab-Recreate-Video"
+  short_description: "Recreate commerce videos with stable multilingual replies"
+  default_prompt: "Use $LuluLab-Recreate-Video to recreate a video. Use the user's explicit reply language, then any clearly available host response-language setting, then the saved task language. Keep the target video language independent. Run host_preflight.py, register all user-uploaded images, and audit VideoGenV2 references before submission. Use gpt-image-2-5-sunburst for images and Seedance 2 Mini for video."

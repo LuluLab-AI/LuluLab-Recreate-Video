@@ -1,3 +1,9 @@
+## 1.3.1 — Skill rename (2026-10-14)
+
+- Rename the installed Skill, frontmatter, invocation, metadata, source folder and installation instructions to `LuluLab-Recreate-Video`.
+- Retain the former Skill identifier only as a legacy manifest compatibility value so interrupted tasks can still resume.
+- Keep the existing image, video, billing and internationalization behavior unchanged.
+
 ## 1.3.0 — AI creator identity sheet (2026-10-14)
 
 - Default new tasks to AI generated creators, with explicit keep-source and user-provided modes; historical manifests retain their established choice.

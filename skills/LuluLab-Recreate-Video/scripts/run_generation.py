@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run optional local video generation from a completed recreate-video-agent manifest."""
+"""Run optional local video generation from a completed LuluLab-Recreate-Video manifest."""
 
 from __future__ import annotations
 

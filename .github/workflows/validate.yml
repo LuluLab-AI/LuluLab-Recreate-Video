@@ -1,4 +1,4 @@
-name: Validate Skill
+name: Validate LuluLab-Recreate-Video Skill
 on:
   push:
   pull_request:
@@ -19,9 +19,9 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg
           python -m pip install pyyaml Pillow
       - name: Validate package and scan source
-        run: python skills/recreate-video-agent/scripts/ci_validate.py
+        run: python skills/LuluLab-Recreate-Video/scripts/ci_validate.py
       - name: Run local tests without paid API calls
-        working-directory: skills/recreate-video-agent
+        working-directory: skills/LuluLab-Recreate-Video
         run: |
           python -m unittest discover -s tests -p "test_*.py"
           node --test tests/test_lululab_node.mjs

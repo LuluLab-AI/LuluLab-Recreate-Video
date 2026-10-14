@@ -29,7 +29,7 @@ class V102RegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "SKILL.md").write_text(
-                "---\nname: recreate-video-agent\nversion: 1.0.2\n---\n# 复刻爆款视频\n",
+                "---\nname: LuluLab-Recreate-Video\nversion: 1.0.2\n---\n# 复刻爆款视频\n",
                 encoding="utf-8",
             )
             self.assertEqual(generation_manifest.skill_version(root), "1.0.2")
