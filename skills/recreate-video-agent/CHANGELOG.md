@@ -1,3 +1,10 @@
+## 1.3.0 — AI creator identity sheet (2026-10-14)
+
+- Default new tasks to AI generated creators, with explicit keep-source and user-provided modes; historical manifests retain their established choice.
+- Generate one reusable, realistic 2×2 four-view identity sheet per selected target creator through the existing LuluLab ImageGenV2 CLI path. Persist its task ID, input fingerprint, file hash and review state; never automatically resubmit an uncertain or failed paid task.
+- Bind reviewed AI sheets to storyboard editing and VideoGenV2 references, including single-segment tasks. Save image-edit reference hashes and verify the storyboard used the same sheet. Keep user uploads in every relevant video request and audit them before submission.
+- Refresh Skill and installation guidance; verify with local and mock tests only. No paid generation was performed.
+
 ## 1.2.1 — Uploaded reference integrity and host compatibility (2026-10-14)
 
 - Correct GitHub installation URLs while retaining `recreate-video-agent` as the Skill name.

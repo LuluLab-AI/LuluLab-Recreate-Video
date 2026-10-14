@@ -470,6 +470,9 @@ def set_interaction_locale(path: str | Path, locale: str) -> Path:
 
 
 def command_init(args: argparse.Namespace) -> Path:
+    creator_mode = str(getattr(args, "creator_mode", "ai_generated") or "ai_generated")
+    if creator_mode not in CREATOR_MODES:
+        raise ValueError(f"无效达人模式：{creator_mode}")
     video_model = str(getattr(args, "video_model", "seedance-2-mini") or "seedance-2-mini")
     duration_mode = str(getattr(args, "duration_mode", "source") or "source")
     target_duration = getattr(args, "target_duration", None)
@@ -533,6 +536,8 @@ def command_init(args: argparse.Namespace) -> Path:
                 "storyboards": {"original": [], "edited": [], "generation": []},
                 "providerCapabilities": {},
                 "creators": [],
+                "creator": {"mode": creator_mode, "targetCreatorIds": []},
+                "creatorGeneration": {},
                 "videoBlueprint": {
                     "source": "local_agent",
                     "file": "",
@@ -680,7 +685,8 @@ def add_original_storyboards_from_metadata(path: str | Path, metadata_file: str 
     return update(path, mutate)
 
 
-CREATOR_SOURCE_TYPES = {"user_provided", "generated_multiview"}
+CREATOR_SOURCE_TYPES = {"user_provided", "generated_multiview", "ai_generated"}
+CREATOR_MODES = {"ai_generated", "keep_source", "user_provided"}
 REQUIRED_MULTIVIEW_ANGLES = {"front", "back"}
 SIDE_PROFILE_ANGLES = {"side_profile", "left_profile", "right_profile"}
 
@@ -697,14 +703,16 @@ def add_creator(
     image_path = require_file(image, "Creator 图")
     source = str(source_type).strip().lower()
     if source not in CREATOR_SOURCE_TYPES:
-        raise ValueError("Creator来源只允许 user_provided 或 generated_multiview；禁止登记原视频抽帧。")
+        raise ValueError("Creator来源无效；禁止登记原视频抽帧。")
     normalized_views = sorted({str(value).strip().lower() for value in (views or []) if str(value).strip()})
-    if source == "generated_multiview":
+    if source in {"generated_multiview", "ai_generated"}:
         missing = sorted(REQUIRED_MULTIVIEW_ANGLES - set(normalized_views))
         if not SIDE_PROFILE_ANGLES.intersection(normalized_views):
             missing.append("side_profile")
         if missing:
             raise ValueError(f"生成的达人多视图缺少角度：{missing}")
+        if source == "ai_generated" and "close_up" not in normalized_views:
+            raise ValueError("AI 达人四视图缺少 close_up。")
         if not product_free_verified:
             raise ValueError("生成的达人多视图必须完成无产品视觉检查。")
     def mutate(data: dict[str, Any]) -> None:
@@ -716,7 +724,7 @@ def add_creator(
             "creatorId": creator_id,
             "file": image_path,
             "sourceType": source,
-            "layout": "multi-view" if source == "generated_multiview" else "provided",
+            "layout": "multi-view" if source in {"generated_multiview", "ai_generated"} else "provided",
         }
         if source == "user_provided" and preserve_original:
             entry["referenceIntent"] = "preserve_original_identity"
@@ -726,11 +734,35 @@ def add_creator(
             entry["file"] = entry["referenceImages"][0]
             if previous.get("referenceIntent") == "preserve_original_identity":
                 entry["referenceIntent"] = "preserve_original_identity"
-        if source == "generated_multiview":
+        if source in {"generated_multiview", "ai_generated"}:
             entry["views"] = normalized_views
             entry["productFreeVerified"] = True
-            entry["imageProvider"] = "agent_native"
+            entry["imageProvider"] = "lululab_cli" if source == "ai_generated" else "agent_native"
         data["creators"].append(entry)
+    return update(path, mutate)
+
+
+def set_creator_mode(path: str | Path, mode: str, creator_ids: list[str] | None = None,
+                     profile: dict[str, Any] | None = None) -> Path:
+    if mode not in CREATOR_MODES:
+        raise ValueError(f"无效达人模式：{mode}")
+    allowed = {"targetCountry", "gender", "ageRange", "appearanceStyle", "clothingStyle", "vibe", "otherRequirements"}
+    if profile is not None and (not isinstance(profile, dict) or set(profile) - allowed or
+                                any(not isinstance(value, str) for value in profile.values())):
+        raise ValueError("达人配置字段或类型无效。")
+    normalized_ids = list(dict.fromkeys(str(x).strip() for x in (creator_ids or []) if str(x).strip()))
+
+    def mutate(data: dict[str, Any]) -> None:
+        current = data.get("creator")
+        current = dict(current) if isinstance(current, dict) else {}
+        current["mode"] = mode
+        if mode != "ai_generated":
+            current["targetCreatorIds"] = []
+        elif creator_ids is not None:
+            current["targetCreatorIds"] = normalized_ids
+        if profile:
+            current.update(profile)
+        data["creator"] = current
     return update(path, mutate)
 
 
@@ -1187,6 +1219,7 @@ def main() -> int:
     init.add_argument("--custom-requirement", default="")
     init.add_argument("--target-country", default="跟原视频一致")
     init.add_argument("--target-language", default="跟原视频一致")
+    init.add_argument("--creator-mode", choices=sorted(CREATOR_MODES), default="ai_generated")
     init.add_argument("--interaction-locale", help="Explicit selected reply locale; overrides --codex-locale.")
     init.add_argument("--codex-locale", help="Codex response locale explicitly supplied by the agent/host.")
     language = sub.add_parser("set-interaction-locale")
@@ -1212,6 +1245,11 @@ def main() -> int:
     creator.add_argument("--view", action="append", default=[])
     creator.add_argument("--product-free-verified", action="store_true")
     creator.add_argument("--preserve-original", action="store_true")
+    creator_mode = sub.add_parser("set-creator-mode")
+    creator_mode.add_argument("--manifest", required=True)
+    creator_mode.add_argument("--mode", choices=sorted(CREATOR_MODES), required=True)
+    creator_mode.add_argument("--creator-id", action="append", default=None)
+    creator_mode.add_argument("--profile-file")
     product = sub.add_parser("set-product-references")
     product.add_argument("--manifest", required=True)
     product.add_argument("--image", action="append", required=True)
@@ -1276,6 +1314,9 @@ def main() -> int:
                 args.view, args.product_free_verified,
                 args.preserve_original,
             )
+        elif args.command == "set-creator-mode":
+            profile = json.loads(Path(args.profile_file).read_text(encoding="utf-8")) if args.profile_file else None
+            result = set_creator_mode(args.manifest, args.mode, args.creator_id, profile)
         elif args.command == "set-product-references":
             result = set_product_references(args.manifest, args.image)
         elif args.command == "register-product-uploads":

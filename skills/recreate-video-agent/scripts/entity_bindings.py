@@ -138,6 +138,12 @@ def validate_bindings(manifest: dict, bp: dict) -> list:
     expected = {(kind, source) for kind, entries in known.items() for source in entries}
     if seen != expected:
         raise ValueError("replacementBindings必须覆盖全部来源人物和产品")
+    creator = manifest.get("creator")
+    if isinstance(creator, dict) and creator.get("mode") == "ai_generated":
+        ai_ids = set(creator.get("targetCreatorIds", []))
+        if ai_ids and not ai_ids <= {target for target, value in target_people.items()
+                                  if value.get("mode") == "replace"}:
+            raise ValueError("AI 达人目标 creatorId 必须对应人物 replace 绑定。")
     return values
 
 

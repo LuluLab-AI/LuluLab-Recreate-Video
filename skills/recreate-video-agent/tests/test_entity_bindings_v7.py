@@ -29,6 +29,7 @@ def blueprint():
 def manifest(root, bp=None):
     path = gm.command_init(type('Args', (), {'output_root': str(root), 'task_id': 'task', 'reuse': False})())
     data = gm.load_manifest(path)
+    data['creator']['mode'] = 'keep_source'  # This legacy binding fixture preserves both source people.
     data['userConfig']['duration'] = 9
     source = root / 'blueprint.json'
     source.write_text(json.dumps({'videoBlueprint': bp or blueprint()}), encoding='utf-8')

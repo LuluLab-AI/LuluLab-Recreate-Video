@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -45,12 +46,20 @@ def _execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     for path in references:
         if not path.is_file() or path.stat().st_size <= 0:
             raise ValueError(f"参考图不存在或为空：{path}")
+    evidence = {
+        "promptSha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+        "referenceSha256": [hashlib.sha256(path.read_bytes()).hexdigest() for path in references],
+    }
 
     task_id = str(args.resume_task_id or "").strip()
     if report_path.is_file():
         previous = json.loads(report_path.read_text(encoding="utf-8"))
         previous_id = str(previous.get("taskId", "")).strip() if isinstance(previous, dict) else ""
         previous_status = str(previous.get("status", "")).strip() if isinstance(previous, dict) else ""
+        if isinstance(previous, dict) and any(
+            key in previous and previous[key] != evidence[key] for key in evidence
+        ):
+            raise ValueError("恢复图片任务的 Prompt 或参考图与原提交不一致。")
         if task_id and previous_id and task_id != previous_id:
             raise ValueError("恢复任务 ID 与已保存的图片任务不一致。")
         if not task_id and (previous_id or previous_status in {"submit_pending", "submit_outcome_unknown", "success"}):
@@ -64,6 +73,7 @@ def _execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
 
     if not task_id:
         write_report(report_path, {
+            **evidence,
             "status": "submit_pending",
             "taskId": "",
             "provider": "lululab_cli",
@@ -79,6 +89,7 @@ def _execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             )
         except (local_video_cli.LocalVideoCliError, service_privacy.AuthorizationUnavailableError) as exc:
             return 3, {
+                **evidence,
                 "status": "submit_outcome_unknown",
                 "taskId": "",
                 "provider": "lululab_cli",
@@ -87,6 +98,7 @@ def _execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                 "message": service_privacy.public_error(str(exc), "LuluLab图片提交失败。"),
             }
         write_report(report_path, {
+            **evidence,
             "status": "submitted",
             "taskId": task_id,
             "provider": "lululab_cli",
@@ -101,6 +113,7 @@ def _execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         saved = local_video_cli.download_media(media, output_path)
     except local_video_cli.TaskFailedError as exc:
         return 2, {
+            **evidence,
             "status": "terminal_failed",
             "taskId": task_id,
             "provider": "lululab_cli",
@@ -110,6 +123,7 @@ def _execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         }
     except (local_video_cli.LocalVideoCliError, service_privacy.AuthorizationUnavailableError) as exc:
         return 3, {
+            **evidence,
             "status": "poll_unknown",
             "taskId": task_id,
             "provider": "lululab_cli",
@@ -118,6 +132,7 @@ def _execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             "message": service_privacy.public_error(str(exc), "LuluLab图片任务查询失败。"),
         }
     return 0, {
+        **evidence,
         "status": "success",
         "taskId": task_id,
         "provider": "lululab_cli",

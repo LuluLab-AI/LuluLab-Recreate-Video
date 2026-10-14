@@ -43,8 +43,13 @@ def creator_files(data: dict[str, Any], segment: dict[str, Any]) -> list[str]:
         reference_audit.validate_creator_references(data, selected)
     files: list[str] = []
     for item in data.get("creators", []):
+        if item.get("sourceType") == "ai_generated" and (
+            data.get("creator", {}).get("mode") != "ai_generated" or
+            str(item.get("creatorId")) not in data.get("creator", {}).get("targetCreatorIds", [])
+        ):
+            continue
         if (str(item.get("creatorId")) in selected or item.get("sourceType") == "user_provided") and (
-            not current_policy or str(item.get("sourceType", "")).strip().lower() in {"user_provided", "generated_multiview"}
+            not current_policy or str(item.get("sourceType", "")).strip().lower() in {"user_provided", "generated_multiview", "ai_generated"}
         ):
             files.extend(str(value) for value in item.get("referenceImages", [item["file"]]))
     return files
@@ -221,7 +226,9 @@ def main() -> int:
         audit_segments: list[dict[str, Any]] = []
         for segment in selected_segments:
             files = prepare_references(data, segment, root, model)
-            uploaded = reference_audit.audit_submission_files(data, files, segment_id=int(segment["segmentId"]))
+            uploaded = reference_audit.audit_submission_files(
+                data, files, segment_id=int(segment["segmentId"]),
+                selected_creator_ids={str(value) for value in segment.get("creatorIds", [])})
             for file in files:
                 path = Path(file).expanduser().resolve()
                 if not path.is_file() or path.stat().st_size <= 0:
@@ -240,6 +247,7 @@ def main() -> int:
                     {**data, "product": {**data.get("product", {}),
                                         "productImages": [{"file": value} for value in required_product_files]}},
                     files, segment_id=int(segment["segmentId"]),
+                    selected_creator_ids={str(value) for value in segment.get("creatorIds", [])},
                 )
             audit_segments.append({
                 "segmentId": int(segment["segmentId"]),

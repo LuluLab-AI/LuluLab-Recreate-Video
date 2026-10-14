@@ -2,7 +2,7 @@
 
 读取锁定Segment、target Storyboard和对应版本蓝图。用户要求最高；静态视觉以target板/身份图为准，动态与声音保留原片蓝图。用KEEP/CHANGE/AUTO-DESIGN清单防止替换身份时改变剧情、表演和动作。
 
-V7从replication-package.json的entityContexts读取本段全部镜头及replacementBindings；Prompt的creatorIds必须等于完整镜头映射后的目标人物集合，不只写九格内或主达人。V6旧任务仍按anchors并集。Prompt开头逐个说明“保留原片身份”或“替换为目标身份”，禁止合并、互换或改变人种、性别、年龄、发色和脸部特征。如anchors中有人但无ID则停止Prompt交接。多Segment任务中跨段人物ID无用户图或合格生成多视图也必须停止；单Segment且用户未提供达人图时，保留文字身份描述但不要求、不生成达人图。
+V7从replication-package.json的entityContexts读取本段全部镜头及replacementBindings；Prompt的creatorIds必须等于完整镜头映射后的目标人物集合，不只写九格内或主达人。V6旧任务仍按anchors并集。Prompt开头逐个说明“保留原片身份”或“替换为目标身份”，禁止合并、互换或改变人种、性别、年龄、发色和脸部特征。如anchors中有人但无ID则停止Prompt交接。新任务`ai_generated`的目标creatorId在单段与多段均须有已登记的2×2身份板；同一ID的各段始终引用同一张图。Prompt说明原片动作和表演仍由Blueprint控制，外貌由目标身份板控制。旧Manifest缺失达人模式时沿用旧的单段无图、多段三视图规则。
 
 每段prompt以参考素材职责开头：一张target板锁定画面状态，产品图锁定产品；存在合规达人图时才说明其锁定外貌。不得在Prompt中把未实际提交的达人图写成参考素材。宫格时间标签仅用于定位，不能出现在成片。按真实shot局部时间逐项描述镜头，不设置宏观阶段数量上限。同镜头关键状态不虚构硬切，Segment边界不自动当切镜。
 

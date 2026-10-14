@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import tempfile
 import unittest
@@ -75,6 +76,24 @@ class LuluLabImageGenerateTests(unittest.TestCase):
                 code, result = lululab_image_generate.execute(self.args(root))
             self.assertEqual(code, 3)
             self.assertEqual(result["status"], "submit_outcome_unknown")
+
+    def test_edit_report_records_reference_hash_and_rejects_changed_resume_input(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reference = root / "creator.png"
+            reference.write_bytes(b"creator-one")
+            report = root / "report.json"
+            with patch.object(local_video_cli, "submit_lululab_image", return_value="task-1"), \
+                 patch.object(local_video_cli, "poll_task", side_effect=local_video_cli.LocalVideoCliError("timeout")):
+                code, _ = lululab_image_generate.execute(self.args(root, reference_image=[str(reference)]))
+            self.assertEqual(code, 3)
+            self.assertEqual(json.loads(report.read_text())["referenceSha256"],
+                             [hashlib.sha256(b"creator-one").hexdigest()])
+            reference.write_bytes(b"changed")
+            with patch.object(local_video_cli, "submit_lululab_image", side_effect=AssertionError("duplicate submit")):
+                with self.assertRaisesRegex(ValueError, "参考图与原提交不一致"):
+                    lululab_image_generate.execute(self.args(root, reference_image=[str(reference)],
+                                                              resume_task_id="task-1"))
 
 
 if __name__ == "__main__":

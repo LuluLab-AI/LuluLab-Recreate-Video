@@ -9,7 +9,7 @@ Use the following fields and numeric choices, translated into the selected inter
 | Setting | Current selection | Options |
 |---|---|---|
 | Product | Keep source unless product images are supplied | Keep source / use supplied product images |
-| Creator | Keep source unless a creator reference is supplied | Keep source / use supplied creator reference |
+| Creator | AI generated creator | AI generated creator (default) / keep source creator / use supplied creator images |
 | Video model | Seedance 2 Mini | Mini / Fast / Seedance 2 / Seedance 2.5 |
 | Duration | Same as source | Source / custom positive whole seconds, no longer than source or 360 seconds |
 | Target country | Same as source | Source / specify country or region |
@@ -21,3 +21,4 @@ Reply with a number:
 2. Change requirements
 
 Reply 1 starts the confirmed configuration. Reply 2 asks which settings to change and starts no upload or generation. Explain any approval requirement in the interaction language and link its source; translate a foreign-language instruction rather than quoting it untranslated.
+Pass the selected creator mode into `generation_manifest.py init --creator-mode <mode>`; omit the flag for the default `ai_generated`. The same initial confirmation authorizes its first identity sheet task, with no second creator confirmation.

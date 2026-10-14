@@ -58,7 +58,8 @@ def uploaded_creator_files(manifest: dict[str, Any]) -> list[str]:
                               for value in x.get("referenceImages", [x.get("file", "")])])
 
 
-def audit_submission_files(manifest: dict[str, Any], files: list[str], *, segment_id: int) -> dict[str, list[str]]:
+def audit_submission_files(manifest: dict[str, Any], files: list[str], *, segment_id: int,
+                           selected_creator_ids: set[str] | None = None) -> dict[str, list[str]]:
     """Fail before paid submission if any uploaded asset is absent from references."""
     actual = deduplicate_files(files)
     products = uploaded_product_files(manifest)
@@ -89,10 +90,16 @@ def audit_submission_files(manifest: dict[str, Any], files: list[str], *, segmen
                     covered.update(record.get("sourceSha256", []))
             except (OSError, ValueError):
                 pass
-    missing = hashes(products + creators) - covered
+    ai_targets = set(manifest.get("creator", {}).get("targetCreatorIds", []))
+    if selected_creator_ids is not None:
+        ai_targets &= selected_creator_ids
+    ai = [str(item.get("file")) for item in manifest.get("creators", [])
+          if isinstance(item, dict) and item.get("sourceType") == "ai_generated"
+          and str(item.get("creatorId")) in ai_targets]
+    missing = hashes(products + creators + ai) - covered
     if missing:
-        raise ValueError(f"Segment {segment_id} 最终 referenceImages 缺少用户上传参考图。")
-    return {"productImages": products, "creatorImages": creators}
+        raise ValueError(f"Segment {segment_id} 最终 referenceImages 缺少用户上传参考图或 AI 身份板。")
+    return {"productImages": products, "creatorImages": creators, "aiCreatorImages": ai}
 
 
 def storyboard_validation_mode(manifest: dict[str, Any]) -> str:
@@ -145,7 +152,7 @@ def validate_creator_references(manifest: dict[str, Any], visible_ids: set[str])
     submitted: list[str] = []
     for creator_id, item in entries.items():
         source = str(item.get("sourceType", "")).strip().lower()
-        if source not in {"user_provided", "generated_multiview"}:
+        if source not in {"user_provided", "generated_multiview", "ai_generated"}:
             raise ValueError(
                 f"Creator {creator_id} 来源无效；禁止把原视频单帧登记或提交为达人参考图。"
             )
@@ -153,8 +160,8 @@ def validate_creator_references(manifest: dict[str, Any], visible_ids: set[str])
             path = Path(str(image)).expanduser().resolve()
             if not path.is_file() or path.stat().st_size <= 0:
                 raise ValueError(f"Creator {creator_id} 参考图不存在或为空：{path}")
-        if source == "generated_multiview":
-            if not multi_segment:
+        if source in {"generated_multiview", "ai_generated"}:
+            if source == "generated_multiview" and not multi_segment:
                 raise ValueError("单Segment且用户未提供达人图时，不得生成或提交达人参考图。")
             views = {str(value).strip().lower() for value in item.get("views", [])}
             missing = sorted(REQUIRED_MULTIVIEW_ANGLES - views)
@@ -162,12 +169,37 @@ def validate_creator_references(manifest: dict[str, Any], visible_ids: set[str])
                 missing.append("side_profile")
             if missing or item.get("layout") != "multi-view":
                 raise ValueError(f"Creator {creator_id} 多视图不完整，缺少：{missing}")
+            if source == "ai_generated" and "close_up" not in views:
+                raise ValueError(f"Creator {creator_id} AI 四视图缺少 close_up。")
             if item.get("productFreeVerified") is not True:
                 raise ValueError(f"Creator {creator_id} 多视图未完成无产品视觉检查。")
         if creator_id in visible_ids:
             submitted.append(creator_id)
     cross_segment = cross_segment_creator_ids(manifest)
     required_ids = visible_ids & cross_segment
+    creator_mode = manifest.get("creator", {})
+    if isinstance(creator_mode, dict) and "mode" in creator_mode:
+        mode = creator_mode.get("mode")
+        if mode not in {"ai_generated", "keep_source", "user_provided"}:
+            raise ValueError("creator.mode 无效。")
+        ai_ids = set(creator_mode.get("targetCreatorIds", []))
+        # New explicit modes do not force identity sheets for preserved background people.
+        required_ids = visible_ids & ai_ids if mode == "ai_generated" else set()
+        if mode == "ai_generated":
+            if visible_ids and not ai_ids:
+                raise ValueError("AI 达人模式须先登记目标 creatorId。")
+            for creator_id in ai_ids:
+                item = entries.get(creator_id)
+                record = manifest.get("creatorGeneration", {}).get(creator_id, {})
+                if not item or item.get("sourceType") != "ai_generated" or record.get("status") != "ready":
+                    raise ValueError(f"AI 达人 {creator_id} 缺少已验证的四视图身份板。")
+                path = Path(str(item.get("file", ""))).expanduser().resolve()
+                if record.get("sha256") != file_sha256(path):
+                    raise ValueError(f"AI 达人 {creator_id} 身份板校验值不匹配。")
+        elif any(item.get("sourceType") == "ai_generated" for key, item in entries.items() if key in visible_ids):
+            raise ValueError("当前达人模式与本段 AI 身份板绑定冲突。")
+        if mode == "user_provided" and not any(item.get("sourceType") == "user_provided" for item in entries.values()):
+            raise ValueError("用户提供达人图模式缺少已登记的上传图片。")
     if multi_segment and not required_ids <= set(entries):
         missing = sorted(required_ids - set(entries))
         raise ValueError(f"多Segment任务必须为跨段人物提供用户达人图或生成的无产品多视图；缺少：{missing}")
@@ -177,6 +209,41 @@ def validate_creator_references(manifest: dict[str, Any], visible_ids: set[str])
         "creatorIds": sorted(submitted),
         "crossSegmentCreatorIds": sorted(required_ids),
     }
+
+
+def validate_ai_storyboard_input(manifest: dict[str, Any], board: dict[str, Any], selected_ids: set[str]) -> None:
+    creator = manifest.get("creator", {})
+    if not isinstance(creator, dict) or creator.get("mode") != "ai_generated":
+        return
+    ai_ids = selected_ids & set(creator.get("targetCreatorIds", []))
+    if not ai_ids:
+        return
+    replacement = board.get("replacement")
+    if not isinstance(replacement, dict) or not board.get("replacementVerified"):
+        raise ValueError("AI 达人分镜缺少已完成的图片替换记录。")
+    report_path = Path(str(replacement.get("imageTaskReport", ""))).expanduser()
+    if not report_path.is_file():
+        raise ValueError("AI 达人分镜缺少 LuluLab 图片编辑任务报告。")
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError("AI 达人分镜图片任务报告不可读取。") from exc
+    if not isinstance(report, dict) or report.get("status") != "success" or report.get("provider") != "lululab_cli":
+        raise ValueError("AI 达人分镜图片编辑任务尚未成功。")
+    edited_file = str(replacement.get("editedImageFile", "")).strip()
+    report_output = str(report.get("output", "")).strip()
+    if not edited_file or not report_output or Path(edited_file).expanduser().resolve() != Path(report_output).expanduser().resolve():
+        raise ValueError("AI 达人图片任务报告与本段 Storyboard 编辑候选文件不一致。")
+    reference_hashes = report.get("referenceSha256")
+    if not isinstance(reference_hashes, list) or any(not isinstance(value, str) for value in reference_hashes):
+        raise ValueError("AI 达人分镜图片报告缺少参考图 SHA256。")
+    references = set(reference_hashes)
+    entries = {str(item.get("creatorId")): item for item in manifest.get("creators", []) if isinstance(item, dict)}
+    missing = [creator_id for creator_id in ai_ids
+               if creator_id not in entries or not Path(str(entries[creator_id].get("file", ""))).is_file()
+               or file_sha256(Path(str(entries[creator_id]["file"]))) not in references]
+    if missing:
+        raise ValueError(f"AI 达人分镜编辑未使用目标身份图：{sorted(missing)}")
 
 
 def version_at_least(value: str, major: int, minor: int) -> bool:
@@ -365,6 +432,7 @@ def audit(manifest: dict[str, Any], segments: list[dict[str, Any]] | None = None
         selected_creators = {str(value) for value in segment.get("creatorIds", [])}
         if protected_identity_gate:
             selected_creators = validate_identity_roster(manifest, board, segment)
+        validate_ai_storyboard_input(manifest, board, selected_creators)
         current_creator_policy = current_or_legacy_at_least(skill_version, 6, 5)
         creator_reference_policy = validate_creator_references(manifest, selected_creators) if current_creator_policy else None
         if not current_creator_policy and not selected_creators <= creator_ids:

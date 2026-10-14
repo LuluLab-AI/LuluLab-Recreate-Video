@@ -5,7 +5,7 @@ license: Apache-2.0
 metadata:
   skillhub:
     slug: recreate-video-agent
-    version: 1.2.1
+    version: 1.3.0
     displayName: Recreate High-Performing Videos / 复刻爆款视频
     summary: Recreate commerce videos with multilingual replies across capable agents.
     tags:
@@ -16,7 +16,7 @@ metadata:
     homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# recreate-video-agent v1.2.1
+# recreate-video-agent v1.3.0
 
 ## Response language
 
@@ -158,16 +158,26 @@ python3 scripts/storyboard_cells.py fast-prepare --original <rawStoryboard> --ed
 
 登记edited时复用同一9个anchors，布局固定3×3。对每格实际可见人物建立身份清单并把全部ID写回anchors；原视频画面只能用于人物理解和生成多视图时的内部视觉依据，不得把任何原片单帧复制、改名或直接登记为Creator图。
 
-达人参考图策略在最终Segment数量锁定、来源映射确定后执行；需要人物图时先准备目标身份，再编辑相关分镜：
+达人参考图策略在最终Segment数量锁定、来源映射确定后执行；需要人物图时先准备目标身份，再编辑相关分镜。新任务的 `creator.mode=ai_generated`，旧 Manifest 缺失该字段时延续已登记的人物方案：
 
-- 用户为某达人提供图片：原样登记为`user_provided`并在相关Segment提交；不得再用原片帧补充。
-- 用户未提供且只有1个Segment：不生成、不登记、不提交达人图；creatorIds只用于Prompt中描述人物。
-- 用户未提供且有多个Segment：按固定图片路由为每位跨段或需保持一致的人物生成一张干净多视图。整张图只需包含同一人物的正面、一个侧面和背面，不再重复生成左右两个侧面；三个视图的身份、发型、服装必须一致。使用纯净中性背景，不得出现产品、道具、场景、文字、水印或原视频画面。视觉检查确认无产品后才登记。
+- `ai_generated`（新任务默认）：依据既有Blueprint识别主要带货达人，将对应来源人物映射为新的目标creatorId，登记 `set-creator-mode --mode ai_generated --creator-id <id>`。不自动替换路人或把多人合并。每个目标身份只通过LuluLab `ImageGenV2` / `gpt-image-2-5-sunburst` / 1K / 1:1 提交一次任务，生成一张2×2四视图（左上特写、右上正面全身、左下侧面、右下背面）；单Segment也生成。目标国家用于穿搭和UGC风格，不推定族裔。外观须自然、真实肤质和比例，避免磨皮、影楼感、产品、道具、文字和水印。图片生成后检查画布与四视图、同一身份及无产品，再登记；不能机械确认的真实感不宣称严格验证。Storyboard替换与VideoGenV2使用同一身份图。
+- `keep_source`：不生成AI达人；保留原片人物绑定。用户同时上传达人图时按身份冲突规则处理，合规图仍参与视频提交。
+- `user_provided`：登记用户上传的达人图，不生成AI达人。每段视频请求仍携带当前任务全部用户上传图片。
+- 缺失 `creator.mode` 的历史任务：保留原有单Segment无图、多Segment所需三视图的规则，不因版本升级重新生成。
+
+新任务在映射人物后运行：
+```text
+python3 scripts/generation_manifest.py set-creator-mode --manifest <manifest> --mode ai_generated --creator-id <target-creator-id> [--profile-file <json>]
+python3 scripts/creator_identity.py --manifest <manifest> --creator-id <target-creator-id>
+```
+生成完成、查看身份板确有同一人物四视图且无产品后运行同一脚本的 `--register-reviewed`；它不提交新任务。多段复用同一文件；中断时仅按已保存taskId恢复；失败或结构异常不自动再次付费。用户明确选其他模式时，运行 `set-creator-mode --mode keep_source|user_provided`。人物设定变化后的新候选须另行授权。
+蓝图缺少结构化角色功能时可传 `--role <角色功能>`，只描述人物在原片中的职责，不把原片外貌描述作为新身份图的指令；恢复时脚本会复用已保存的角色输入。
+AI达人分镜编辑时，把该身份板作为 `lululab_image_generate.py --reference-image <identity-sheet>` 的输入。登记 edited Storyboard 的 replacement metadata 时填写 `imageTaskReport: <该次图片编辑report.json绝对路径>`；提交视频前脚本核对报告中的参考图 SHA256 与已登记身份板相同。此报告属于既有一次整板编辑，不增加图片任务。
 
 登记命令：
 ```text
 python3 scripts/generation_manifest.py add-creator --manifest <manifest> --creator-id <id> --image <user-image> --source-type user_provided [--preserve-original]
-python3 scripts/generation_manifest.py add-creator --manifest <manifest> --creator-id <id> --image <generated-sheet> --source-type generated_multiview --view front --view side_profile --view back --product-free-verified
+python3 scripts/generation_manifest.py add-creator --manifest <legacy-manifest> --creator-id <id> --image <generated-sheet> --source-type generated_multiview --view front --view side_profile --view back --product-free-verified
 ```
 当用户明确要求沿用原人物且上传对应达人图时，先核实身份一致，再用 `--preserve-original` 登记；身份不一致必须阻断并说明。此标记仅说明参考图用途，不改变 replacementBindings。
 `sourceType`缺失、原片抽帧来源、生成多视图角度不全或未通过无产品检查时，Prompt交接与视频生成都必须阻断。

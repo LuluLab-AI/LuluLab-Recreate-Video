@@ -82,9 +82,10 @@ def _selected_boards(manifest: Mapping[str, Any]) -> list[dict[str, Any]]:
             context = entity_bindings.segment_context(dict(manifest), {"segmentId": identifier})
             if context is not None:
                 visible = set(context["creatorIds"])
-            reference_audit.validate_identity_roster(
+            visible = reference_audit.validate_identity_roster(
                 dict(manifest), item, {"segmentId": identifier, "creatorIds": sorted(visible)}
             )
+            reference_audit.validate_ai_storyboard_input(dict(manifest), item, visible)
         replacement = item.get("replacement")
         if isinstance(replacement, dict) and replacement.get("applied"):
             reference_audit.validate_product_references(dict(manifest), item)
@@ -160,6 +161,9 @@ def input_fingerprint(manifest: Mapping[str, Any], boards: list[Mapping[str, Any
         "duration": manifest.get("userConfig", {}).get("duration"),
         "sourceBlueprint": entity_bindings.load_blueprint(dict(manifest)),
         "replacementBindings": manifest.get("replacementBindings"),
+        "creatorMode": manifest.get("creator"),
+        "creatorGeneration": {key: {"inputFingerprint": value.get("inputFingerprint"), "sha256": value.get("sha256")}
+                              for key, value in manifest.get("creatorGeneration", {}).items()},
         "productImages": [image_digest(value) for value in product_images],
         "creators": [{"id": x.get("creatorId"), "source": x.get("sourceType"),
                       "sha256": [image_digest(value) for value in x.get("referenceImages", [x])]} for x in manifest.get("creators", [])],
