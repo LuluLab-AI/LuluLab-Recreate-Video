@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,17 @@ def summarize(manifest: dict[str, Any]) -> dict[str, Any]:
         "taskId": blueprint.get("taskId"),
         "file": analysis_file,
     }
+    source = manifest.get("benchmarkVideo", {}).get("analysis", {})
+    if source.get("sourceSha256") and source.get("sourceFile"):
+        path = Path(str(source["sourceFile"])).expanduser().resolve()
+        digest = hashlib.sha256()
+        if path.is_file():
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        analysis["cacheValid"] = path.is_file() and digest.hexdigest() == source["sourceSha256"]
+    else:
+        analysis["cacheValid"] = None
     if final_path:
         status = "video_ready"
     elif final_record.get("file"):

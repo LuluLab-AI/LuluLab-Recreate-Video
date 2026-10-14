@@ -1,6 +1,6 @@
 # Start confirmation
 
-Use the stable interaction language selected by SKILL.md: an explicit reply-language request takes precedence over the configured Codex response language, then the saved interaction locale, then English. Apply this before the initial announcement. The user's message text, attachment names, source dialogue, numeric confirmations, and target video language do not switch the chat language.
+Use the stable interaction language selected by SKILL.md: an explicit reply-language request takes precedence over the clearly available host response-language setting (including Codex), then the saved interaction locale, then English. Apply this before the initial announcement. The user's message text, attachment names, source dialogue, numeric confirmations, and target video language do not switch the chat language.
 
 Show one localized confirmation before uploading the source video, editing/generating an image, or submitting a video task. Reply 1 authorizes the source/storyboard uploads, server analysis with at most one retry after a clear terminal failure, image processing, and the first video generation. Other paid retries require fresh authorization. Keep the existing task's authorized scope; language changes do not require another confirmation.
 

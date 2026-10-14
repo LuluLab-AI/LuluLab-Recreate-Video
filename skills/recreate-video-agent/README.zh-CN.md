@@ -13,15 +13,15 @@
 
 ## 环境要求
 
-需要能够读取 Agent Skills 并操作文件的智能体（如 Codex、Claude Code）、Python 3、FFmpeg/FFprobe、Node.js 20+、macOS 或 Windows、LuluLab 网络连接，以及在首次服务端调用前配置 LuluLab API Key。其他智能体需要等效的文件型 Skill 机制。Node.js CLI 已包含在 `scripts/lululab_cli.mjs`，无需 npm 或 `npx` 安装。
+需要能够读取文件型 Skill 并执行命令的智能体（如 Codex、Claude Code，或具备这些能力的 WorkBuddy 环境）、Python 3.9+、FFmpeg/FFprobe、Node.js 20+、macOS、Windows 或 Linux、LuluLab 网络连接，以及在首次服务端调用前配置 LuluLab API Key。运行 `python3 scripts/host_preflight.py` 可获知缺少的宿主能力。Node.js CLI 已包含在 `scripts/lululab_cli.mjs`，无需 npm 或 `npx` 安装。
 
 ## 安装
 
 可向智能体发送：
 
-> 请将这个 LuluLab Skill 安装到我当前使用的 AI 智能体环境：https://github.com/LuluLab-AI/recreate-video-agent 。请遵循项目的官方安装说明。
+> 请将这个 LuluLab Skill 安装到我当前使用的 AI 智能体环境：https://github.com/LuluLab-AI/LuluLab-Recreate-Video 。请遵循项目的官方安装说明。
 
-智能体先检查仓库，再把完整的 `recreate-video-agent/` 文件夹复制到当前智能体的用户 Skill 目录，名称保持 `recreate-video-agent`。各智能体目录不同，须按其当前文档确认。`SKILL.md`、`scripts/`、`references/`、`core/`、`utils/`、`assets/` 应在同一根目录；不能只复制 `SKILL.md`，也不能把仓库的 `skills/` 包装目录当作 Skill 根目录。已有同名 Skill 时先比较版本，替换前征求用户确认；不覆盖其他 Skill。在 Skill 根目录运行 `node scripts/lululab_cli.mjs --help` 与 `python3 scripts/video_cli_preflight.py --help`，重新加载 Skill 列表并确认可识别。
+智能体先检查仓库，再把完整的 `recreate-video-agent/` 文件夹复制到当前智能体的用户 Skill 目录，名称保持 `recreate-video-agent`。各智能体目录不同，须按其当前文档确认。`SKILL.md`、`scripts/`、`references/`、`core/`、`utils/`、`assets/` 应在同一根目录；不能只复制 `SKILL.md`，也不能把仓库的 `skills/` 包装目录当作 Skill 根目录。已有同名 Skill 时先比较版本，替换前征求用户确认；不覆盖其他 Skill。在 Skill 根目录运行 `python3 scripts/host_preflight.py`、`node scripts/lululab_cli.mjs --help` 与 `python3 scripts/video_cli_preflight.py --help`，重新加载 Skill 列表并确认可识别。
 
 ## 快速开始
 

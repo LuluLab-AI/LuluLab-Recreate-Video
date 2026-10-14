@@ -13,15 +13,15 @@ This Skill recreates an **authorized** commerce video using a source video, prod
 
 ## Requirements
 
-A file-capable Agent Skills host such as Codex or Claude Code, Python 3, FFmpeg/FFprobe, Node.js 20+, macOS or Windows, network access to LuluLab, and a LuluLab API Key for the first service call are required. Other agents need an equivalent file-based Skill mechanism. The Node.js CLI is bundled at `scripts/lululab_cli.mjs`; there is no npm or `npx` install step.
+A file-capable Agent Skills host such as Codex or Claude Code, or WorkBuddy with file-based Skills and command execution, Python 3.9+, FFmpeg/FFprobe, Node.js 20+, macOS, Windows or Linux, network access to LuluLab, and a LuluLab API Key for the first service call are required. Run `python3 scripts/host_preflight.py` to identify missing capabilities. The Node.js CLI is bundled at `scripts/lululab_cli.mjs`; there is no npm or `npx` install step.
 
 ## Installation
 
 Ask your agent:
 
-> Please install this LuluLab Skill into my current AI agent environment: https://github.com/LuluLab-AI/recreate-video-agent . Follow the project's official installation instructions.
+> Please install this LuluLab Skill into my current AI agent environment: https://github.com/LuluLab-AI/LuluLab-Recreate-Video . Follow the project's official installation instructions.
 
-The Agent should review the repository, then copy the **whole** `recreate-video-agent/` folder into its current user Skill directory under the name `recreate-video-agent`. Agent locations vary, so confirm the current location in that agent's documentation. Keep `SKILL.md`, `scripts/`, `references/`, `core/`, `utils/` and `assets/` together. Do not copy only `SKILL.md` or the repository's `skills/` wrapper. If the same Skill is already installed, compare versions and ask before replacement; leave other Skills alone. Run `node scripts/lululab_cli.mjs --help` and `python3 scripts/video_cli_preflight.py --help` from the Skill root, reload the agent's Skill list, and verify discovery.
+The Agent should review the repository, then copy the **whole** `recreate-video-agent/` folder into its current user Skill directory under the name `recreate-video-agent`. Agent locations vary, so confirm the current location in that agent's documentation. Keep `SKILL.md`, `scripts/`, `references/`, `core/`, `utils/` and `assets/` together. Do not copy only `SKILL.md` or the repository's `skills/` wrapper. If the same Skill is already installed, compare versions and ask before replacement; leave other Skills alone. Run `python3 scripts/host_preflight.py`, `node scripts/lululab_cli.mjs --help` and `python3 scripts/video_cli_preflight.py --help` from the Skill root, reload the agent's Skill list, and verify discovery.
 
 ## Quick Start
 

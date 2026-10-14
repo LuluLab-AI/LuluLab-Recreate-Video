@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,82 @@ except ModuleNotFoundError:
     import entity_bindings
 
 CURRENT_SKILL_VERSION = "5.1"
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def deduplicate_files(files: list[str]) -> list[str]:
+    """Keep first occurrence and order; identical bytes count as one image."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in files:
+        path = Path(raw).expanduser().resolve()
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise ValueError(f"参考图不存在或为空：{path}")
+        digest = file_sha256(path)
+        if digest not in seen:
+            result.append(raw)
+            seen.add(digest)
+    return result
+
+
+def uploaded_product_files(manifest: dict[str, Any]) -> list[str]:
+    product = manifest.get("product", {})
+    if not isinstance(product, dict):
+        return []
+    values = product.get("productImages") or product.get("images", [])
+    if not isinstance(values, list):
+        raise ValueError("product.productImages/images 必须是数组。")
+    return deduplicate_files([str(x if isinstance(x, str) else x.get("file", x.get("filePath", ""))) for x in values])
+
+
+def uploaded_creator_files(manifest: dict[str, Any]) -> list[str]:
+    return deduplicate_files([str(value) for x in manifest.get("creators", [])
+                              if isinstance(x, dict) and x.get("sourceType") == "user_provided"
+                              for value in x.get("referenceImages", [x.get("file", "")])])
+
+
+def audit_submission_files(manifest: dict[str, Any], files: list[str], *, segment_id: int) -> dict[str, list[str]]:
+    """Fail before paid submission if any uploaded asset is absent from references."""
+    actual = deduplicate_files(files)
+    products = uploaded_product_files(manifest)
+    creators = uploaded_creator_files(manifest)
+    product = manifest.get("product", {})
+    if products and use_benchmark_product(manifest) and isinstance(product, dict) and any(
+        isinstance(x, dict) and x.get("sourceType") == "user_provided"
+        for x in product.get("productImages", [])
+    ) and product.get("referenceIntent") != "preserve_original_identity":
+        raise ValueError("用户上传产品图与沿用原产品的选择存在冲突；请明确图片仅用于原产品身份参考。")
+    preserved_people = {str(x.get("targetId")) for x in manifest.get("replacementBindings", [])
+                        if isinstance(x, dict) and x.get("entityType") == "character" and x.get("mode") == "preserve"}
+    for creator in manifest.get("creators", []):
+        if (isinstance(creator, dict) and creator.get("sourceType") == "user_provided"
+                and str(creator.get("creatorId")) in preserved_people
+                and creator.get("referenceIntent") != "preserve_original_identity"):
+            raise ValueError("用户上传达人图与沿用原人物的选择存在冲突；请明确图片仅用于原人物身份参考。")
+    def hashes(values: list[str]) -> set[str]:
+        return {file_sha256(Path(x)) for x in values}
+    covered = hashes(actual)
+    for value in actual:
+        path = Path(value)
+        provenance = path.with_suffix(path.suffix + ".sources.json")
+        if provenance.is_file():
+            try:
+                record = json.loads(provenance.read_text(encoding="utf-8"))
+                if record.get("outputSha256") == file_sha256(path):
+                    covered.update(record.get("sourceSha256", []))
+            except (OSError, ValueError):
+                pass
+    missing = hashes(products + creators) - covered
+    if missing:
+        raise ValueError(f"Segment {segment_id} 最终 referenceImages 缺少用户上传参考图。")
+    return {"productImages": products, "creatorImages": creators}
 
 
 def storyboard_validation_mode(manifest: dict[str, Any]) -> str:
@@ -72,9 +149,10 @@ def validate_creator_references(manifest: dict[str, Any], visible_ids: set[str])
             raise ValueError(
                 f"Creator {creator_id} 来源无效；禁止把原视频单帧登记或提交为达人参考图。"
             )
-        path = Path(str(item.get("file", ""))).expanduser().resolve()
-        if not path.is_file() or path.stat().st_size <= 0:
-            raise ValueError(f"Creator {creator_id} 参考图不存在或为空：{path}")
+        for image in item.get("referenceImages", [item.get("file", "")]):
+            path = Path(str(image)).expanduser().resolve()
+            if not path.is_file() or path.stat().st_size <= 0:
+                raise ValueError(f"Creator {creator_id} 参考图不存在或为空：{path}")
         if source == "generated_multiview":
             if not multi_segment:
                 raise ValueError("单Segment且用户未提供达人图时，不得生成或提交达人参考图。")

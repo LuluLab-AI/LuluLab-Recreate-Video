@@ -149,12 +149,22 @@ def build_plan(manifest: Mapping[str, Any], cell_roots: Mapping[int, Path]) -> d
 
 
 def input_fingerprint(manifest: Mapping[str, Any], boards: list[Mapping[str, Any]]) -> str:
+    product = manifest.get("product", {})
+    product_images = product.get("productImages", product.get("images", [])) if isinstance(product, dict) else []
+    def image_digest(value: Any) -> str:
+        raw = value if isinstance(value, str) else value.get("file", value.get("filePath", ""))
+        return _file_digest(str(raw))
     identity = {
         "schema": "replication-package-v1",
         "handoffPolicyVersion": HANDOFF_POLICY_VERSION,
         "duration": manifest.get("userConfig", {}).get("duration"),
         "sourceBlueprint": entity_bindings.load_blueprint(dict(manifest)),
         "replacementBindings": manifest.get("replacementBindings"),
+        "productImages": [image_digest(value) for value in product_images],
+        "creators": [{"id": x.get("creatorId"), "source": x.get("sourceType"),
+                      "sha256": [image_digest(value) for value in x.get("referenceImages", [x])]} for x in manifest.get("creators", [])],
+        "model": manifest.get("userConfig", {}).get("videoModel"),
+        "targetLanguage": manifest.get("userConfig", {}).get("targetLanguage"),
         "boards": [
             {
                 "storyboardId": int(board["storyboardId"]),

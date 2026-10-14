@@ -21,7 +21,7 @@ class RecoveryTests(unittest.TestCase):
         gm.save_manifest(m,data)
         return m,board
 
-    def invoke(self,m,board,submit,poll):
+    def invoke(self,m,board,submit,poll,*,mock_upload=True):
         with ExitStack() as s:
             s.enter_context(patch.object(sys,'argv',['run_generation.py','--manifest',str(m),'--skip-concat','--generation-approved']))
             s.enter_context(patch.object(gm,'validate_prompt_record'))
@@ -29,6 +29,8 @@ class RecoveryTests(unittest.TestCase):
             s.enter_context(patch.object(run.reference_audit,'audit',return_value={'passed':True,'warnings':[]}))
             s.enter_context(patch.object(run.reference_audit,'validate_product_references',return_value=[]))
             s.enter_context(patch.object(run,'prepare_references',return_value=[str(board)]))
+            if mock_upload:
+                s.enter_context(patch.object(cli,'upload_reference_images',return_value=[{'url':'https://example.com/board.png','mimeType':'image/png','expiredAt':''}]))
             st=s.enter_context(patch.object(cli,'submit_video',side_effect=submit))
             s.enter_context(patch.object(cli,'poll_task',side_effect=poll))
             try: run.main()
@@ -49,6 +51,15 @@ class RecoveryTests(unittest.TestCase):
             saved=gm.load_manifest(m)['videos'][0]
             self.assertEqual((saved['status'],saved['taskId']),('querying','v1'))
             self.assertEqual(self.invoke(m,board,AssertionError('no resubmit'),cli.LocalVideoCliError('timeout')),0)
+
+    def test_poll_resume_does_not_reupload_references(self):
+        with tempfile.TemporaryDirectory() as td:
+            m,board=self.setup_manifest(Path(td))
+            media=[{'url':'https://example.com/board.png','mimeType':'image/png','expiredAt':''}]
+            with patch.object(cli,'upload_reference_images',return_value=media) as uploads:
+                self.assertEqual(self.invoke(m,board,lambda *a,**k:'v1',cli.LocalVideoCliError('timeout'),mock_upload=False),1)
+                self.assertEqual(self.invoke(m,board,AssertionError('no resubmit'),cli.LocalVideoCliError('timeout'),mock_upload=False),0)
+            self.assertEqual(uploads.call_count,1)
 
     def test_terminal_failure_does_not_resubmit(self):
         with tempfile.TemporaryDirectory() as td:

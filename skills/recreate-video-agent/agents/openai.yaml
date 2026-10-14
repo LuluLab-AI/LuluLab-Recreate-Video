@@ -1,4 +1,4 @@
 interface:
   display_name: "Recreate High-Performing Videos / 复刻爆款视频"
-  short_description: "Recreate commerce videos with replies in Codex's configured language"
-  default_prompt: "Use $recreate-video-agent to recreate a video. Use the configured Codex response language from the first announcement through final delivery; switch only for an explicit reply-language request or host setting change. Translate skill quotes and tool errors. Keep the target video language independent. Use gpt-image-2-5-sunburst for images and Seedance 2 Mini for video."
+  short_description: "Recreate commerce videos with stable multilingual replies"
+  default_prompt: "Use $recreate-video-agent to recreate a video. Use the user's explicit reply language, then any clearly available host response-language setting, then the saved task language. Keep the target video language independent. Run host_preflight.py, register all user-uploaded images, and audit VideoGenV2 references before submission. Use gpt-image-2-5-sunburst for images and Seedance 2 Mini for video."

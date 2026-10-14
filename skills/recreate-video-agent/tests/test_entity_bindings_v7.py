@@ -108,7 +108,8 @@ class EntityBindingTests(unittest.TestCase):
             ]
             segment=data['videoPrompts']['segments'][0]; segment['productPresent']=True
             files=run_generation.prepare_references(data,segment,root,'seedance-2-fast')
-            self.assertIn(str(product.resolve()),files); self.assertNotIn(str(unrelated.resolve()),files)
+            resolved = [str(Path(value).resolve()) for value in files]
+            self.assertIn(str(product.resolve()),resolved); self.assertIn(str(unrelated.resolve()),resolved)
             self.assertEqual(eb.segment_context(data,segment)['sourceProductIds'],['p1','p2'])
             product.unlink()
             with self.assertRaises(ValueError): run_generation.prepare_references(data,segment,root,'seedance-2-fast')

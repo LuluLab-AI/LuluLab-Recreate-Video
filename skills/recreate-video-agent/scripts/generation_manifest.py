@@ -692,6 +692,7 @@ def add_creator(
     source_type: str,
     views: list[str] | None = None,
     product_free_verified: bool = False,
+    preserve_original: bool = False,
 ) -> Path:
     image_path = require_file(image, "Creator 图")
     source = str(source_type).strip().lower()
@@ -707,6 +708,9 @@ def add_creator(
         if not product_free_verified:
             raise ValueError("生成的达人多视图必须完成无产品视觉检查。")
     def mutate(data: dict[str, Any]) -> None:
+        previous = next((item for item in data["creators"] if str(item.get("creatorId")) == creator_id), None)
+        if isinstance(previous, dict) and previous.get("sourceType") == "user_provided" and source != "user_provided":
+            raise ValueError(f"Creator {creator_id} 已有用户上传图，不得用生成图覆盖。")
         data["creators"] = [item for item in data["creators"] if str(item["creatorId"]) != creator_id]
         entry: dict[str, Any] = {
             "creatorId": creator_id,
@@ -714,6 +718,14 @@ def add_creator(
             "sourceType": source,
             "layout": "multi-view" if source == "generated_multiview" else "provided",
         }
+        if source == "user_provided" and preserve_original:
+            entry["referenceIntent"] = "preserve_original_identity"
+        if source == "user_provided" and isinstance(previous, dict) and previous.get("sourceType") == source:
+            images = previous.get("referenceImages", [previous.get("file")])
+            entry["referenceImages"] = list(dict.fromkeys([str(value) for value in images if value] + [image_path]))
+            entry["file"] = entry["referenceImages"][0]
+            if previous.get("referenceIntent") == "preserve_original_identity":
+                entry["referenceIntent"] = "preserve_original_identity"
         if source == "generated_multiview":
             entry["views"] = normalized_views
             entry["productFreeVerified"] = True
@@ -723,7 +735,7 @@ def add_creator(
 
 
 def set_product_references(path: str | Path, images: list[str]) -> Path:
-    """Register the exact product images that must be sent to video generation."""
+    """Select replacement references while retaining earlier user uploads."""
     if not images:
         raise ValueError("新产品替换必须至少提供一张产品参考图。")
     normalized: list[str] = []
@@ -738,9 +750,33 @@ def set_product_references(path: str | Path, images: list[str]) -> Path:
             raise ValueError("manifest.product 必须是对象。")
         product["mode"] = "replacement"
         product["useBenchmarkProduct"] = False
-        product["productImages"] = [{"file": value} for value in normalized]
+        existing = product.get("productImages", product.get("images", []))
+        registered = {
+            str(x if isinstance(x, str) else x.get("file", x.get("filePath", ""))):
+                dict(x) if isinstance(x, dict) else {"file": str(x)}
+            for x in existing
+        }
+        for value in normalized:
+            registered.setdefault(value, {"file": value})
+        product["productImages"] = list(registered.values())
         product.pop("images", None)
 
+    return update(path, mutate)
+
+
+def register_product_uploads(path: str | Path, images: list[str], *, preserve_original: bool = False) -> Path:
+    """Record user uploads without changing the selected product strategy."""
+    normalized = [require_file(image, "产品参考图") for image in images]
+    if not normalized:
+        raise ValueError("至少需要一张产品参考图。")
+    def mutate(data: dict[str, Any]) -> None:
+        product = data.setdefault("product", {})
+        existing = product.get("productImages", product.get("images", []))
+        paths = [str(x if isinstance(x, str) else x.get("file", x.get("filePath", ""))) for x in existing]
+        product["productImages"] = [{"file": value, "sourceType": "user_provided"}
+                                    for value in dict.fromkeys(paths + normalized)]
+        if preserve_original:
+            product["referenceIntent"] = "preserve_original_identity"
     return update(path, mutate)
 
 
@@ -1175,9 +1211,14 @@ def main() -> int:
     creator.add_argument("--source-type", choices=sorted(CREATOR_SOURCE_TYPES), required=True)
     creator.add_argument("--view", action="append", default=[])
     creator.add_argument("--product-free-verified", action="store_true")
+    creator.add_argument("--preserve-original", action="store_true")
     product = sub.add_parser("set-product-references")
     product.add_argument("--manifest", required=True)
     product.add_argument("--image", action="append", required=True)
+    uploads = sub.add_parser("register-product-uploads")
+    uploads.add_argument("--manifest", required=True)
+    uploads.add_argument("--image", action="append", required=True)
+    uploads.add_argument("--preserve-original", action="store_true")
     generation_boards = sub.add_parser("set-generation-storyboards")
     generation_boards.add_argument("--manifest", required=True)
     generation_boards.add_argument("--metadata-file", required=True)
@@ -1233,9 +1274,12 @@ def main() -> int:
             result = add_creator(
                 args.manifest, args.image, args.creator_id, args.source_type,
                 args.view, args.product_free_verified,
+                args.preserve_original,
             )
         elif args.command == "set-product-references":
             result = set_product_references(args.manifest, args.image)
+        elif args.command == "register-product-uploads":
+            result = register_product_uploads(args.manifest, args.image, preserve_original=args.preserve_original)
         elif args.command == "set-generation-storyboards":
             result = set_generation_storyboards(args.manifest, args.metadata_file)
         elif args.command == "set-provider-capabilities":

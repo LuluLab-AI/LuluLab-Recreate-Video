@@ -28,7 +28,7 @@
 python3 scripts/generation_manifest.py set-replacement-bindings --manifest <manifest> --file <bindings.json>
 ```
 
-全部来源人物/产品各有一条映射，纯产品/无人声合法，完全无实体用空数组。preserve的targetId等于sourceId。不同人物不得合并；仅用户明确要求统一时，相关条目均记录mergeAuthorized=true。不能自行设置此授权。产品替换先按原命令登记产品参考图，referenceImages只选该产品实际需要的图。未替换产品不用referenceImages。
+全部来源人物/产品各有一条映射，纯产品/无人声合法，完全无实体用空数组。preserve的targetId等于sourceId。不同人物不得合并；仅用户明确要求统一时，相关条目均记录mergeAuthorized=true。不能自行设置此授权。产品替换先按原命令登记产品参考图，referenceImages只选该产品实际需要的图。图片编辑按绑定选择对应素材；视频生成须另行提交全部用户上传产品图和达人图，即使绑定为preserve。
 
 该清单同时用于分镜编辑指令、Prompt和参考图；它不是strict像素区域Replacement Map。目标creatorId也是各anchor的creatorIds含义，source characterId与speakerId分别保留。只露手时使用局部身份描述，不猜脸；镜面或分屏可同一身份多次出现，不机械按人数拆ID。
 

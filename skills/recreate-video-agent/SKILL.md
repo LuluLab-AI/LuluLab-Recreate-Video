@@ -1,37 +1,37 @@
 ---
 name: recreate-video-agent
-description: Recreate authorized commerce videos with LuluLab CLI. Keep all user-facing replies in the configured Codex response language, independently of the target video language.
+description: Recreate authorized commerce videos with LuluLab CLI across file-based Agent Skills hosts. Keep interaction language independent of target video language.
 license: Apache-2.0
 metadata:
   skillhub:
     slug: recreate-video-agent
-    version: 1.2.0
+    version: 1.2.1
     displayName: Recreate High-Performing Videos / 复刻爆款视频
-    summary: Recreate commerce videos with Codex-configured multilingual replies.
+    summary: Recreate commerce videos with multilingual replies across capable agents.
     tags:
       - 视频复刻
       - 爆款视频
       - 电商广告
       - AI视频
-    homepage: https://github.com/LuluLab-AI/recreate-video-agent
+    homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# recreate-video-agent v1.2.0
+# recreate-video-agent v1.2.1
 
 ## Response language
 
-Resolve the interaction language before the first commentary message, including the skill-use announcement. Use this precedence:
+Resolve the interaction language before the first user-facing message, including the skill-use announcement. Use this precedence:
 
 1. The user's explicit request for the response language.
-2. The response language configured in Codex, as supplied by the host instructions/settings or explicitly reported by the user.
+2. The response language explicitly available from the current host's instructions/settings (including Codex's configured response language), or explicitly reported by the user.
 3. The interaction locale already saved for this task or established in the conversation.
 4. English when no preference is available.
 
-Keep this selection stable across turns, numeric confirmations, attachments, resumed tasks, and tool calls. A message written in another language is not an explicit request to switch. Never infer the interaction language from filenames, file contents, the source video, target video language, OS/terminal locale, or the language of this skill. If the host does not expose its setting, do not claim to have read it, scan unrelated configuration, or guess from the OS; use the remaining precedence rules. An explicit user request or a newly supplied Codex response-language setting can update the saved selection.
+Keep this selection stable across turns, numeric confirmations, attachments, resumed tasks, and tool calls. A message written in another language is not an explicit request to switch. Never infer the interaction language from filenames, file contents, the source video, target video language, OS/terminal locale, or the language of this skill. If the host does not expose its setting, do not claim to have read it, scan unrelated configuration, or guess from the OS; use the remaining precedence rules. An explicit user request or a newly supplied host response-language setting can update the saved selection.
 
 Apply the selected language to every user-facing announcement, heading, confirmation field and option, progress update, permission explanation, error/recovery message, report summary, link label, and final response. Translate instructions cited from SKILL.md and references into that language; link the original instead of inserting an untranslated quote. Tool output and Chinese examples are diagnostic/source material, not text to copy into chat. Translate their meaning while preserving task IDs, commands, names, and paths when necessary. Render templates in the selected language, even when only English and Chinese examples are provided. Check each message before sending for unintended language switches.
 
-Pass the selected locale explicitly at initialization with `--interaction-locale <locale>` (for example `en`, `zh-CN`, `fr`, or `pt-BR`). Scripts cannot read the Codex app's language setting. `--codex-locale <locale>` is an optional explicit handoff of that setting, not automatic detection. On resume, retain the saved locale unless an explicit user language request or current host setting supersedes it; update it with `generation_manifest.py set-interaction-locale --manifest <manifest> --interaction-locale <locale>`. Locale state must not change targetLanguage, source facts, prompts, task IDs, or generation authorization.
+Pass the selected locale explicitly at initialization with `--interaction-locale <locale>` (for example `en`, `zh-CN`, `fr`, or `pt-BR`). Scripts cannot read the host app's language setting. `--codex-locale <locale>` remains an optional explicit handoff for Codex compatibility, not automatic detection. Claude Code and WorkBuddy may supply an explicit host language setting in the same way; otherwise use the saved task language or English. On resume, retain the saved locale unless an explicit user language request or current host setting supersedes it; update it with `generation_manifest.py set-interaction-locale --manifest <manifest> --interaction-locale <locale>`. Locale state must not change targetLanguage, source facts, prompts, task IDs, or generation authorization.
 
 The target video language is independent and keeps its existing user-selected/source-language behavior. Exact source dialogue, filenames, and generation prompts may need another language as task data; they do not change the chat language. When a registered prompt differs from the interaction language, export its unchanged text and provide a localized summary and file link by default. Only display the complete other-language prompt inline when the user explicitly requests it, clearly labeling its target language. Follow references/prompt_display_format.md for the applicable display path.
 
@@ -39,9 +39,13 @@ The target video language is independent and keeps its existing user-selected/so
 
 A pending server state such as Created or Running is progress, not a workflow failure. After dispatch, retain the returned process/session ID and keep waiting on that execution while sending concise progress updates. Do not end the task with a final pending-status message while a live polling process remains active. Continue through successful analysis, storyboard preparation, authorized generation, and delivery; stop only on a real error/timeout, required user input, or an explicit user interruption. Preserve task IDs and never resubmit to overcome waiting.
 
-On every resumed turn, or after a polling process was interrupted, run `python3 scripts/task_status.py --manifest <manifest>` first. If it reports `video_ready`, immediately give the user the existing final video and its saved technical status. Do not fetch, re-download, re-render, or resubmit in that case. If it reports `segments_ready`, finish local assembly; for a pending task, resume only its saved task ID. Never rely on the last chat message or a past `Created`/`Running` snapshot to describe current state.
+On every resumed turn, or after a polling process was interrupted, run `python3 scripts/task_status.py --manifest <manifest>` first. If it reports `video_ready`, immediately give the user the existing final video and its saved technical status. Do not fetch, re-download, re-render, or resubmit in that case. If it reports `segments_ready`, finish local assembly; for a pending task, resume only its saved task ID. For a local source, reuse completed Gemini analysis when `analysis.cacheValid` is true; false means the source changed. Null means old or remote provenance needs manual comparison with the saved task input before reuse. Never rely on the last chat message or a past `Created`/`Running` snapshot to describe current state.
 
-When resuming, first read the manifest and saved analysis/image/video results. If a stage is already succeeded and its files are present, use them and advance to the next stage. Fetch/resume the existing ID only when the result is not yet available. Report current saved state rather than an earlier chat snapshot. CLI availability must be checked against a bundled executable before asking the user to install anything; restore a missing bundled file only from a local checksum-verified distribution, without replacing a differing existing binary.
+When resuming, first read the manifest and saved analysis/image/video results. Reuse a stage only when its input fingerprint and output files still match; changes to source video, user references, bindings, model, locale or prompts invalidate dependent stages. Fetch/resume the existing ID only when the result is not yet available. Report current saved state rather than an earlier chat snapshot. Check the bundled Node CLI before asking the user to install anything.
+
+## Host capability check
+
+This single file-based Skill works in Codex, Claude Code, and WorkBuddy only when the host can read and write files and run commands. Before processing, run `python3 scripts/host_preflight.py` from the Skill root. It checks Python 3.9+, Node.js 20+, FFmpeg/FFprobe, file read/write, and bundled CLI execution. If any check fails, report its exact missing capability and stop dependent work. Do not assume WorkBuddy has every capability. Keep the same SKILL.md and scripts for all hosts.
 
 ## 技能概述
 
@@ -53,7 +57,7 @@ When resuming, first read the manifest and saved analysis/image/video results. I
 
 - 图片生成和编辑一律使用 `scripts/lululab_image_generate.py`，模型固定 `gpt-image-2-5-sunburst`，分辨率1K。原生图片工具和其他图片平台不参与本流程。
 - 视频一律使用 LuluLab CLI，默认 `seedance-2-mini`（Seedance2 Mini）、720p。不自动切换LibTV、小云雀、即梦或其他平台。
-- 通用命令：`lululab task submit --workflow-id <ID> --input <JSON>`；取得ID后用 `task fetch --id <ID>` 恢复。所有参考图先使用 `upload` 上传为媒体对象；顺序为最终Storyboard、需替换的产品图、人物图。
+- 通用命令：`lululab task submit --workflow-id <ID> --input <JSON>`；取得ID后用 `task fetch --id <ID>` 恢复。所有参考图先使用 `upload` 上传为媒体对象；顺序为最终Storyboard、用户上传的产品图、用户上传的达人图。沿用原片的选择不取消上传素材的登记与提交。
 - 工作流ID内置；`LULULAB_IMAGE_WORKFLOW_ID`、`LULULAB_VIDEO_WORKFLOW_ID`仅为可选高级覆盖项，不要求用户配置。
 - Seedance2 Mini每段4–15秒；既有11秒和9秒规划可继续使用。不要为了切换到Mini再次付费拆解。
 - CLI不可用、鉴权失败、任务失败或超时时，保留已有任务和素材，报告具体原因，不绕过固定通道或自动重做。
@@ -96,7 +100,7 @@ python3 scripts/lululab_key_preflight.py
 ```text
 python3 scripts/generation_manifest.py set-product-references --manifest <manifest> --image <product-image> [--image <product-image-2>]
 ```
-该命令必须把`product.useBenchmarkProduct`设为false并保存`product.productImages`。未完成登记不得进入Storyboard替换；产品图与Storyboard、人物身份图用途不同，生成时三类引用都必须提交。
+替换产品时，该命令把`product.useBenchmarkProduct`设为false并保存`product.productImages`。如用户上传了产品图但要求沿用原产品，使用 `generation_manifest.py register-product-uploads --manifest <manifest> --image <image> --preserve-original` 独立登记，并先确认图片确实代表原产品；不得擅自改变替换策略。没有明确一致性时阻断生成并说明冲突。所有上传的产品图和达人图都应跨段进入视频参考图，不因沿用选项消失；图片编辑仍按替换策略使用素材。
 
 ## 2. Gemini先拆解
 
@@ -162,9 +166,10 @@ python3 scripts/storyboard_cells.py fast-prepare --original <rawStoryboard> --ed
 
 登记命令：
 ```text
-python3 scripts/generation_manifest.py add-creator --manifest <manifest> --creator-id <id> --image <user-image> --source-type user_provided
+python3 scripts/generation_manifest.py add-creator --manifest <manifest> --creator-id <id> --image <user-image> --source-type user_provided [--preserve-original]
 python3 scripts/generation_manifest.py add-creator --manifest <manifest> --creator-id <id> --image <generated-sheet> --source-type generated_multiview --view front --view side_profile --view back --product-free-verified
 ```
+当用户明确要求沿用原人物且上传对应达人图时，先核实身份一致，再用 `--preserve-original` 登记；身份不一致必须阻断并说明。此标记仅说明参考图用途，不改变 replacementBindings。
 `sourceType`缺失、原片抽帧来源、生成多视图角度不全或未通过无产品检查时，Prompt交接与视频生成都必须阻断。
 
 ## 5. Prompt与生成
@@ -185,11 +190,12 @@ python3 scripts/video_cli_preflight.py --manifest <manifest>
 ```text
 python3 scripts/run_generation.py --manifest <manifest> --video-provider lululab_cli --generation-approved
 ```
+原有 ThreadPoolExecutor 保持不变；`--max-concurrency` 默认3，允许1至8。提交前先完成上传与引用审计，任务 ID 返回后立即持久化；恢复时不重新提交。相同 SHA256 媒体仅在有效时复用，缓存无有效期证明时重新校验媒体 URL。
 没有可用LuluLab时保留Prompt和素材并报告CLI问题；不自动换渠道。
 
 每个Segment只提交一次并立即保存返回的画布、节点或任务标识；之后只恢复同一任务。已开始提交后，失败、未知状态、超时、登录或余额异常都不得自动切换到下一家CLI，避免重复付费提交。首次提交必须处于本轮启动确认的授权内；任何重生成均需用户重新授权。
 
-付费提交前必须检查`referenceAudit.segments[].orderedFiles`：顺序为最终Storyboard、独立产品参考图、该段人物身份图。只要Replacement Map含`replaceProduct=true`，产品图必须同时出现在`registeredProductImages`、`productImages`和`orderedFiles`中；任一处缺失、文件为空，或Manifest仍标记沿用原产品，都必须阻止提交。不得因为Storyboard里已经画出了新产品而省略独立产品图。
+付费提交前必须检查`referenceAudit.segments[].orderedFiles`：顺序为最终Storyboard、全部已登记用户产品图、全部已登记用户达人图，并用 SHA256 审计最终 `referenceImages`。同一图片只上传一次；有效期内跨段复用。超上限时只使用现有可验证合并图方案，否则阻断；不得静默丢图。Replacement Map含`replaceProduct=true`时，仍须校验独立产品图和替换绑定；沿用原片时不得因此跳过用户上传图。
 
 ## 6. 核验与交付
 

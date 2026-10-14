@@ -1,3 +1,10 @@
+## 1.2.1 — Uploaded reference integrity and host compatibility (2026-10-14)
+
+- Correct GitHub installation URLs while retaining `recreate-video-agent` as the Skill name.
+- Register user uploads independently of replacement decisions; audit every segment's VideoGenV2 references before paid submission, including preserve-original tasks.
+- Reuse SHA256-keyed reference uploads when media remains valid, fingerprint dependent stages, and cap existing submit/poll concurrency.
+- Add portable host capability preflight and Mock CLI regression tests. No paid generation was run.
+
 ## 1.2.0 — GitHub installation and portable CLI candidate (2026-10-10)
 
 - Preserve the source workflow and task recovery rules while routing LuluLab task, upload and credit commands through the bundled Node.js client.

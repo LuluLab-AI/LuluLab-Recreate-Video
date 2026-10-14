@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import platform
 import shutil
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
@@ -35,6 +37,7 @@ LULULAB_IMAGE_MODEL_ID = "gpt-image-2-5-sunburst"
 LULULAB_IMAGE_WORKFLOW_ID = "ImageGenV2"
 LULULAB_VIDEO_WORKFLOW_ID = "VideoGenV2"
 LULULAB_IMAGE_RESOLUTION = "1K"
+_UPLOAD_SESSION_CACHE: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
 
 DREAMINA_VIDEO_MODEL_IDS = {
     key: str(value["dreaminaId"])
@@ -235,10 +238,46 @@ def video_workflow_id() -> str:
     return os.environ.get("LULULAB_VIDEO_WORKFLOW_ID", "").strip() or LULULAB_VIDEO_WORKFLOW_ID
 
 
-def upload_reference_images(files: Iterable[Path]) -> list[dict[str, Any]]:
-    return [media(run_lululab_cli(["upload", str(path)]),
-                  "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png")
-            for path in files]
+def upload_reference_images(files: Iterable[Path], *, cache_path: Path | None = None) -> list[dict[str, Any]]:
+    """Reuse a content-addressed upload only while its media URL is valid."""
+    cache: dict[str, Any] = {}
+    if cache_path and cache_path.is_file():
+        try:
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            cache = {}
+    result: list[dict[str, Any]] = []
+    for path in files:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        entry = cache.get(digest)
+        valid = False
+        if isinstance(entry, dict) and str(entry.get("url", "")).startswith("https://"):
+            try:
+                expires = datetime.fromisoformat(str(entry["expiredAt"]).replace("Z", "+00:00"))
+                valid = expires.tzinfo is not None and (expires - datetime.now(timezone.utc)).total_seconds() > 300
+            except (KeyError, ValueError, TypeError):
+                valid = False
+            if not valid and not entry.get("expiredAt"):
+                session = _UPLOAD_SESSION_CACHE.get((str(cache_path), digest))
+                valid = bool(session and time.time() - session[0] < 600 and session[1] == entry)
+                if not valid and cache_path:
+                    try:
+                        with urlopen(Request(entry["url"], method="HEAD"), timeout=10) as response:
+                            valid = 200 <= response.status < 400
+                    except (OSError, ValueError):
+                        valid = False
+        if not valid:
+            entry = media(run_lululab_cli(["upload", str(path)]),
+                          "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png")
+            cache[digest] = entry
+            if cache_path:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = cache_path.with_suffix(cache_path.suffix + ".tmp")
+                temporary.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+                temporary.replace(cache_path)
+        _UPLOAD_SESSION_CACHE[(str(cache_path), digest)] = (time.time(), entry)
+        result.append(entry)
+    return result
 
 
 def run_dreamina_cli(arguments: Sequence[str], *, cli_path: str | os.PathLike[str] | None = None, timeout: float = 600.0) -> Any:
@@ -390,6 +429,7 @@ def submit_video(
     reference_files: Iterable[str | os.PathLike[str]] | None = None,
     aspect_ratio: str = "9:16",
     resolution: str = "720p",
+    reference_media: list[dict[str, Any]] | None = None,
 ) -> str:
     if provider not in {"dreamina_cli", "xiaoyunque_cli", "lululab_cli"}:
         raise LocalVideoCliError(f"未知本地视频 provider：{provider}")
@@ -399,9 +439,11 @@ def submit_video(
     files = _reference_files(reference_files, int(checked.get("maxImages", 9)))
     model_id = _provider_model_id(provider, model)
     if provider == "lululab_cli":
+        if reference_media is not None and len(reference_media) != len(files):
+            raise LocalVideoCliError("预上传媒体数量与参考图数量不一致。")
         payload = {"model": model_id, "prompt": prompt.strip(),
                    "duration": int(checked["duration"]), "aspectRatio": aspect_ratio,
-                   "resolution": resolution, "referenceImages": upload_reference_images(files)}
+                   "resolution": resolution, "referenceImages": reference_media if reference_media is not None else upload_reference_images(files)}
         return _task_id(run_lululab_cli([
             "task", "submit", "--workflow-id", video_workflow_id(),
             "--input", json.dumps(payload, ensure_ascii=False, separators=(",", ":")),

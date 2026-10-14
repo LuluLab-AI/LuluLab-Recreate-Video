@@ -17,4 +17,4 @@ Prompt说明文使用目标视频语言，包括参考素材职责、格式与�
 字幕与UI全部禁止；只有蓝图确认剧情作用且用户允许的金额特效可保留。声音时间轴不得生成可见文字。按 prompt_display_format.md 的交互语言规则展示并导出每段完整 prompt。
 
 结构化绑定可降低串声风险，不保证生成模型百分之百遵守；本版不新增音频参考、TTS或后期配音。
-V7每段使用完整镜头productIds决定productPresent，只提交replacementBindings中实际替换产品的referenceImages。原始对白保留在蓝图；目标语言对白仍逐条关联utteranceId/lineId。指令、描述使用目标视频语言；交互语言遵循 SKILL.md 的 Codex 配置优先规则，不按消息文字或操作系统语言重新检测。最终Prompt明确角色对应镜头、动作与产品持有者；不得把镜头人物并集解释为每一帧同时出现。
+V7每段使用完整镜头productIds决定productPresent，图片编辑只按replacementBindings中实际替换的产品选图；视频生成另外提交全部用户上传产品图和达人图。原始对白保留在蓝图；目标语言对白仍逐条关联utteranceId/lineId。指令、描述使用目标视频语言；交互语言遵循 SKILL.md 的 明确可获取的宿主语言设置优先规则，不按消息文字或操作系统语言重新检测。最终Prompt明确角色对应镜头、动作与产品持有者；不得把镜头人物并集解释为每一帧同时出现。

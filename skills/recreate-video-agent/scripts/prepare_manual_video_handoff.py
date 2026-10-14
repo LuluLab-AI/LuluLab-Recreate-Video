@@ -31,12 +31,13 @@ def build(manifest_path: Path, output_dir: Path | None = None) -> dict[str, Any]
     for segment in prompt_segments:
         segment_id = str(segment.get("segmentId"))
         ordered = run_generation.prepare_references(data, segment, root, model)
-        storyboards = set(run_generation.storyboard_files(data, segment))
-        creators = set(run_generation.creator_files(data, segment))
+        storyboards = {str(Path(x).expanduser().resolve()) for x in run_generation.storyboard_files(data, segment)}
+        creators = {str(Path(x).expanduser().resolve()) for x in run_generation.creator_files(data, segment)}
         references = []
         for file in ordered:
-            role = "storyboard" if file in storyboards else "creator" if file in creators else "product"
-            references.append({"role": role, "file": str(Path(file).expanduser().resolve())})
+            resolved = str(Path(file).expanduser().resolve())
+            role = "storyboard" if resolved in storyboards else "creator" if resolved in creators else "product"
+            references.append({"role": role, "file": resolved})
         segments.append({
             "segmentId": segment.get("segmentId"),
             "title": segment.get("title", ""),

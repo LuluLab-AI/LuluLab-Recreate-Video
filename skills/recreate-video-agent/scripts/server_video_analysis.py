@@ -733,6 +733,10 @@ def main() -> int:
                 benchmark=args.benchmark, url=args.benchmark_url,
             ) as prepared:
                 technical = manifest.setdefault('benchmarkVideo', {}).setdefault('analysis', {})
+                if args.benchmark:
+                    source_path = Path(args.benchmark).expanduser().resolve()
+                    technical['sourceSha256'] = generation_manifest.file_sha256(source_path)
+                    technical['sourceFile'] = str(source_path)
                 technical.setdefault('media', {})['duration'] = prepared['sourceDuration']
                 technical['analysisDuration'] = prepared['analysisDuration']
                 technical['candidateCuts'] = analysis_cut_candidates(technical)

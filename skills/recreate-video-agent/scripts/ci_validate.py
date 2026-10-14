@@ -9,7 +9,8 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_NAME = ROOT.name
+EXPECTED_NAME = "recreate-video-agent"
+REPOSITORY_URL = "https://github.com/LuluLab-AI/LuluLab-Recreate-Video"
 REQUIRED = ("SKILL.md", "README.md", "README.zh-CN.md", "LICENSE", ".gitignore", "scripts/lululab_cli.mjs")
 FORBIDDEN_PARTS = {".venv", ".pytest_cache", "__pycache__", "jobs", "output", "outputs", "dist", "node_modules"}
 FORBIDDEN_FILES = {".env", ".DS_Store"}
@@ -27,7 +28,7 @@ def validate() -> None:
     assert isinstance(frontmatter.get("description"), str) and frontmatter["description"].strip(), "missing description"
     for relative in ("README.md", "README.zh-CN.md"):
         readme = (ROOT / relative).read_text(encoding="utf-8")
-        assert "https://github.com/LuluLab-AI/" + EXPECTED_NAME in readme, f"wrong repository URL in {relative}"
+        assert REPOSITORY_URL in readme, f"wrong repository URL in {relative}"
         assert "SKILL.md" in readme, f"missing Skill entry in {relative}"
     for path in ROOT.rglob("*"):
         if not path.is_file() or ".git" in path.parts:

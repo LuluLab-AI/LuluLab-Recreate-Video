@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,9 +30,7 @@ def product_files(data: dict[str, Any]) -> list[str]:
     product = data.get("product", {})
     if not isinstance(product, dict):
         return []
-    values = product.get("productImages")
-    if values is None:
-        values = product.get("images", [])
+    values = product.get("productImages") or product.get("images", [])
     if not isinstance(values, list):
         raise ValueError("product.productImages/images 必须是数组。")
     return [path for item in values if (path := local_path(item))]
@@ -39,20 +38,16 @@ def product_files(data: dict[str, Any]) -> list[str]:
 
 def creator_files(data: dict[str, Any], segment: dict[str, Any]) -> list[str]:
     selected = {str(value) for value in segment.get("creatorIds", [])}
-    if not selected:
-        return []
     current_policy = reference_audit.current_or_legacy_at_least(str(data.get("skillVersion", "")), 6, 5)
     if current_policy:
         reference_audit.validate_creator_references(data, selected)
-    return [
-        str(item["file"])
-        for item in data.get("creators", [])
-        if str(item.get("creatorId")) in selected
-        and (
-            not current_policy
-            or str(item.get("sourceType", "")).strip().lower() in {"user_provided", "generated_multiview"}
-        )
-    ]
+    files: list[str] = []
+    for item in data.get("creators", []):
+        if (str(item.get("creatorId")) in selected or item.get("sourceType") == "user_provided") and (
+            not current_policy or str(item.get("sourceType", "")).strip().lower() in {"user_provided", "generated_multiview"}
+        ):
+            files.extend(str(value) for value in item.get("referenceImages", [item["file"]]))
+    return files
 
 
 def storyboard_files(data: dict[str, Any], segment: dict[str, Any]) -> list[str]:
@@ -84,25 +79,39 @@ def select_segments(segments: list[dict[str, Any]], selected_ids: list[int] | No
     return [item for item in segments if int(item["segmentId"]) in requested]
 
 
+def submission_fingerprint(segment: dict[str, Any], files: list[str], model: str, resolution: str, aspect_ratio: str) -> str:
+    identity = {"segment": segment, "model": model, "resolution": resolution, "aspectRatio": aspect_ratio,
+                "referenceSha256": [reference_audit.file_sha256(Path(x)) for x in files]}
+    return hashlib.sha256(json.dumps(identity, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
 def prepare_references(data: dict[str, Any], segment: dict[str, Any], root: Path, model: str) -> list[str]:
     boards = storyboard_files(data, segment)
-    board_id = int(segment["storyboardIds"][0])
-    board = next(
-        item for item in data.get("storyboards", {}).get("generation", [])
-        if int(item["storyboardId"]) == board_id
-    )
-    needs_product = reference_audit.product_presence(board, segment) and not reference_audit.use_benchmark_product(data)
     context = reference_audit.entity_bindings.segment_context(data, segment)
-    products = context["productReferenceImages"] if context is not None else product_files(data) if needs_product else []
+    # Upload provenance is independent of the replacement decision. Every user
+    # supplied image must reach each segment, including preserved entities.
+    registered_products = product_files(data)
+    products = registered_products or (context["productReferenceImages"] if context is not None else [])
     creators = creator_files(data, segment)
     maximum = int((capability(model) or {}).get("maxImages", 9))
-    files = boards + products + creators
+    files = reference_audit.deduplicate_files(boards + products + creators)
     if len(files) > maximum and len(products) > 1:
-        identity_board = reference_board.render(
-            [Path(value).expanduser().resolve() for value in products],
-            root / "references" / f"product-identity-board-{segment['segmentId']}.jpg",
-        )
-        files = boards + [str(identity_board)] + creators
+        identity_board = root / "references" / f"product-identity-board-{segment['segmentId']}.jpg"
+        provenance_path = identity_board.with_suffix(identity_board.suffix + ".sources.json")
+        source_hashes = [reference_audit.file_sha256(Path(value)) for value in products]
+        reusable = False
+        if identity_board.is_file() and provenance_path.is_file():
+            try:
+                previous = json.loads(provenance_path.read_text(encoding="utf-8"))
+                reusable = (previous.get("sourceSha256") == source_hashes and
+                            previous.get("outputSha256") == reference_audit.file_sha256(identity_board))
+            except (OSError, ValueError):
+                pass
+        if not reusable:
+            identity_board = reference_board.render([Path(value).expanduser().resolve() for value in products], identity_board)
+            provenance_path.write_text(json.dumps({"outputSha256": reference_audit.file_sha256(identity_board),
+                                                   "sourceSha256": source_hashes}), encoding="utf-8")
+        files = reference_audit.deduplicate_files(boards + [str(identity_board)] + creators)
     if len(files) > maximum:
         raise ValueError(
             f"Segment {segment.get('segmentId')} 需要 {len(files)} 张参考图，超过模型上限 {maximum}；不得静默丢弃素材。"
@@ -142,7 +151,10 @@ def main() -> int:
     parser.add_argument("--full-quality-review", action="store_true", help="生成后执行完整视觉扫描和原片/成片对齐图；默认仅做快速技术质检。")
     parser.add_argument("--generation-approved", action="store_true")
     parser.add_argument("--segment-id", type=int, action="append", default=[])
+    parser.add_argument("--max-concurrency", type=int, default=3)
     args = parser.parse_args()
+    if not 1 <= args.max_concurrency <= 8:
+        parser.error("--max-concurrency 必须介于 1 和 8 之间。")
 
     lock_handle = None
     try:
@@ -209,20 +221,26 @@ def main() -> int:
         audit_segments: list[dict[str, Any]] = []
         for segment in selected_segments:
             files = prepare_references(data, segment, root, model)
+            uploaded = reference_audit.audit_submission_files(data, files, segment_id=int(segment["segmentId"]))
             for file in files:
                 path = Path(file).expanduser().resolve()
                 if not path.is_file() or path.stat().st_size <= 0:
                     raise ValueError(f"参考图不存在或为空：{path}")
-            plans.append({"segment": segment, "files": files})
+            fingerprint = submission_fingerprint(segment, files, model, resolution, str(config.get("aspectRatio", "9:16")))
+            plans.append({"segment": segment, "files": files, "inputFingerprint": fingerprint})
             boards = storyboard_files(data, segment)
             creators = creator_files(data, segment)
-            segment_products = [value for value in files if value in products]
+            segment_products = uploaded["productImages"]
             required_product_files = reference_audit.validate_product_references(data, next(
                 item for item in data.get("storyboards", {}).get("generation", [])
                 if int(item["storyboardId"]) == int(segment["storyboardIds"][0])
             ))
-            if required_product_files and not set(required_product_files) <= {str(Path(value).expanduser().resolve()) for value in files}:
-                raise ValueError(f"Segment {segment.get('segmentId')} 的最终视频提交参数缺少产品参考图。")
+            if required_product_files:
+                reference_audit.audit_submission_files(
+                    {**data, "product": {**data.get("product", {}),
+                                        "productImages": [{"file": value} for value in required_product_files]}},
+                    files, segment_id=int(segment["segmentId"]),
+                )
             audit_segments.append({
                 "segmentId": int(segment["segmentId"]),
                 "storyboards": boards,
@@ -254,6 +272,11 @@ def main() -> int:
             segment = plan["segment"]
             segment_id = int(segment["segmentId"])
             previous = selected_attempt(existing_videos.get(segment_id, {}), candidate_id)
+            if previous.get("inputFingerprint") and previous["inputFingerprint"] != plan["inputFingerprint"]:
+                raise ValueError(f"Segment {segment_id} 的素材或Prompt已变化；现有任务ID不能用于新输入，请先核查并明确授权新候选。")
+            if (not previous.get("inputFingerprint") and previous.get("status") in {"success", "submitted", "querying"}
+                    and (reference_audit.uploaded_product_files(data) or reference_audit.uploaded_creator_files(data))):
+                raise ValueError(f"Segment {segment_id} 的旧任务缺少参考图输入指纹，无法证明已上传图片参与生成；请核查旧请求，禁止自动重提。")
             previous_output = Path(str(previous.get("output_file", ""))).expanduser()
             if previous.get("status") == "success" and previous_output.is_file() and previous_output.stat().st_size > 0:
                 results.append({
@@ -283,14 +306,21 @@ def main() -> int:
                 reference_files=plan["files"],
                 resolution=resolution,
                 aspect_ratio=str(config.get("aspectRatio", "9:16")),
+                reference_media=plan.get("referenceMedia"),
             )
             return plan, task_id
 
         submit_errors: list[str] = []
         if new_plans:
+            cache_path = root / "analysis" / "reference-upload-cache.json"
             for plan in new_plans:
-                generation_manifest.set_video(manifest_path, int(plan["segment"]["segmentId"]), "submit_pending", candidateId=candidate_id, provider=provider, model=model)
-            with ThreadPoolExecutor(max_workers=len(new_plans)) as pool:
+                plan["referenceMedia"] = local_video_cli.upload_reference_images(
+                    [Path(value) for value in plan["files"]], cache_path=cache_path)
+                if len(plan["referenceMedia"]) != len(plan["files"]):
+                    raise ValueError("最终 referenceImages 数量与审计通过的文件数量不一致。")
+            for plan in new_plans:
+                generation_manifest.set_video(manifest_path, int(plan["segment"]["segmentId"]), "submit_pending", candidateId=candidate_id, provider=provider, model=model, inputFingerprint=plan["inputFingerprint"])
+            with ThreadPoolExecutor(max_workers=min(len(new_plans), args.max_concurrency)) as pool:
                 futures = {pool.submit(submit, plan): plan for plan in new_plans}
                 for future in as_completed(futures):
                     try:
@@ -306,7 +336,7 @@ def main() -> int:
                     generation_manifest.set_video(
                         manifest_path, segment_id, "submitted", candidateId=candidate_id,
                         taskId=task_id, provider=provider, model=model, resolution=resolution,
-                        prompt=str(segment["prompt"]),
+                        prompt=str(segment["prompt"]), inputFingerprint=plan["inputFingerprint"],
                     )
                     pending.append({**plan, "taskId": task_id})
         if submit_errors:
@@ -334,7 +364,7 @@ def main() -> int:
             }
 
         if pending:
-            with ThreadPoolExecutor(max_workers=len(pending)) as pool:
+            with ThreadPoolExecutor(max_workers=min(len(pending), args.max_concurrency)) as pool:
                 future_map = {pool.submit(poll_and_download, plan): plan for plan in pending}
                 for future in as_completed(future_map):
                     plan = future_map[future]
@@ -356,10 +386,13 @@ def main() -> int:
         for item in results:
             segment_id = int(item["segment"]["segmentId"])
             if item["ok"]:
+                prior = selected_attempt(existing_videos.get(segment_id, {}), candidate_id)
                 generation_manifest.set_video(
                     manifest_path, segment_id, "success", candidateId=candidate_id,
                     taskId=item["taskId"], provider=provider, output_file=item["output"],
                     media=item["media"], model=model, resolution=resolution,
+                    inputFingerprint=(next(plan["inputFingerprint"] for plan in plans if int(plan["segment"]["segmentId"]) == segment_id)
+                                      if not item["reused"] or prior.get("inputFingerprint") else None),
                 )
             else:
                 generation_manifest.set_video(
