@@ -5,7 +5,7 @@ license: Apache-2.0
 metadata:
   skillhub:
     slug: LuluLab-Recreate-Video
-    version: 1.3.6
+    version: 1.3.7
     displayName: LuluLab-Recreate-Video
     summary: Recreate commerce videos with multilingual replies across capable agents.
     tags:
@@ -16,7 +16,7 @@ metadata:
     homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# LuluLab-Recreate-Video v1.3.6
+# LuluLab-Recreate-Video v1.3.7
 
 ## Response language
 
@@ -94,7 +94,7 @@ python3 scripts/lululab_key_preflight.py
 
 图片生成与编辑固定通过LuluLab CLI的ImageGenV2；服务端拆解通过RecreateVideoPromptV3；视频通过VideoGenV2。鉴权仍延迟至首次服务端调用前，密钥不在聊天或交付物中展示。客户端不导出音频、不运行ASR、不做TTS。
 
-人物ID仍是Prompt语义绑定的硬门禁，但达人参考图按来源和Segment数量决定。绝不把原视频抽取的单帧登记或提交为达人参考图。用户提供达人图时直接使用用户图；用户未提供时，多Segment任务必须按上述图片路由生成每位持续人物的无产品多视图，单Segment任务不生成、不提交达人参考图。
+人物ID仍是Prompt语义绑定的硬门禁。绝不把原视频抽取的单帧登记或提交为达人参考图。新任务的 `ai_generated` 模式在单段和多段均生成并复用2×2身份板；用户提供达人图时直接使用用户图，`keep_source` 不生成身份板。旧Manifest缺少 `creator.mode` 时保留历史规则。
 
 ## 1. 预检与初始化
 
@@ -141,11 +141,21 @@ Planner V2沿用V1分段引擎与时长规则：最少Segment、整数秒模型�
 
 ## 4. 生成唯一rawStoryboard
 
+### v1.3.7 逐段就绪执行顺序
+
+完成服务端拆解、Planner V2 和人物/产品映射后，立即并行启动所需的 `creator_identity.py --creator-id <ID>` 与 `storyboard.py --stream-ready --max-workers 5`。`user_provided` 和 `keep_source` 跳过 AI 达人生成；新任务的 `ai_generated` 单段和多段均生成 2×2 身份板。每个目标 creatorId 只生成一次，后续段复用。
+
+`storyboard.py` 先校验完整分段规划，再并行抽帧。每段完成时立即输出 `storyboard_ready` 事件和独立 metadata。收到事件后，立即用 `generation_manifest.py add-storyboards-from-metadata --metadata-file <该段metadata>` 登记该段，然后检查该段的目标身份板、产品图和映射是否就绪。就绪即提交该段 ImageGenV2；若只缺对应身份板，该段等待该身份板，其他段继续抽帧和编辑。还可用 `storyboard.py --segment-id <ID>` 只抽指定段；旧批量命令保持兼容。最多同时抽取 5 段，最多同时编辑 5 段。图片任务的 output/report 按段独立，沿用已有 taskId 恢复。
+
+一段图片完成后立即执行该段 `fast-prepare`、登记 edited Storyboard、`prepare_prompt_handoff.py`、现有 Agent 生成并登记 Prompt、视频预检和 `run_generation.py --segment-id <ID> --skip-concat --dispatch-only --generation-approved`。取得 taskId 后继续推进其他段，不等待该段成片。图片、Prompt 和视频可在不同段同时处于不同阶段。只有最终拼接等待全部段成功。等待前读取 `task_status.py --assert-can-wait`；`readySegmentActions` 包括原始板、图片和 Prompt 已就绪动作，`waitingDependencies` 表示仅待对应目标身份板的段。
+
+用户产品图的本地文件、尺寸、格式、SHA256 和登记可在 Gemini 拆解时提前完成；产品语义映射仍使用蓝图。Fast 模式维持文件、结构、引用、时长、画幅和音轨的机械检查，不增加视觉模型审核。旧 Manifest 的三视图和 16 宫格读取逻辑保留，仅用于恢复旧任务。新任务只走 2×2 达人和 3×3 九宫格。
+
 执行storyboard.py，传--video、--timestamps-file、--output-dir、--model（`--timestamps-file`既接受9个anchor对象的JSON，也接受每行一个时间戳的纯文本，不要再为格式往返试探）。当前Planner V2返回9个anchors，因此每段生成一张3×3 Storyboard；客户端不读取服务端layout字段，而是从anchors数量派生布局。抽帧成功、9格齐全、时间戳位于Segment窗口内由程序硬校验；不再为了模糊、闭眼、遮挡等逐阶段单独调用视觉质检。起点保持Segment开始状态。因最近整数秒取整而多出的尾部只延续或定格原片最后可观察状态，不得凭空新增镜头、动作、对白或剧情；这类不超过0.5秒的尾部补齐静默处理，无需向用户报警。
 
 抽板后、首次图片编辑前，完整读取 references/entity_bindings.md。在原有分镜理解步骤对照原始九格与蓝图核对关键人物/产品，仅有具体疑问时补看相关原片帧；保存来源人物/产品到目标的 replacementBindings。不能把说话人当成人物清单，也不能把所有人物替换为同一达人。此来源核对不增加编辑后或视频生成后质检。
 
-按 references/storyboard_editing.md 清理原片烘焙的对白字幕、促销文字及无关手机UI，并记录字幕的内容、位置、样式与出现时间，供成片后期重建；不将未核实的原片价格或促销承诺带入目标分镜。需要编辑时通过LuluLab CLI把去字和产品/达人替换合并到一次整板编辑；未替换且没有字幕/UI时原板直接进行机械准备，不进行无必要重绘。各段原始板、绑定及参考图均就绪后，最多5段整板编辑应并发运行；每段使用不同的 output 和 report 路径，按各自 taskId 独立恢复。运行：
+按 references/storyboard_editing.md 清理原片烘焙的对白字幕、促销文字及无关手机UI，并记录字幕的内容、位置、样式与出现时间，供成片后期重建；不将未核实的原片价格或促销承诺带入目标分镜。需要编辑时通过LuluLab CLI把去字和产品/达人替换合并到一次整板编辑；未替换且没有字幕/UI时原板直接进行机械准备，不进行无必要重绘。每段原始板、绑定及本段参考图就绪后，该段立即启动整板编辑，最多5段并发；每段使用不同的 output 和 report 路径，按各自 taskId 独立恢复。运行：
 ```text
 python3 scripts/lululab_image_generate.py --prompt-file <prompt.txt> --reference-image <reference.png> --aspect-ratio <ratio> --output <output.png> --report <report.json>
 ```
@@ -190,7 +200,7 @@ python3 scripts/generation_manifest.py add-creator --manifest <legacy-manifest> 
 
 ## 5. Prompt与生成
 
-按Segment流水线推进：某段最终目标分镜完成、登记并通过现有引用校验后，立即为该段准备Prompt并用 `run_generation.py --segment-id <ID> --skip-concat --dispatch-only --generation-approved` 提交首次视频任务并保存taskId，再处理其他段。若多段同时就绪，一次传入多个 `--segment-id` 并设置 `--max-concurrency 5` 并发提交。全部段已有taskId后，运行查询、下载、拼接命令；该命令只处理已有taskId的段。已提交段只恢复原taskId；更新Prompt或分镜元数据时保留已完成段的记录，不用原始分镜代替尚未完成的目标分镜。
+按Segment流水线推进：某段最终目标分镜完成、登记并通过现有引用校验后，立即为该段准备Prompt并用 `run_generation.py --segment-id <ID> --skip-concat --dispatch-only --generation-approved` 提交首次视频任务并保存taskId，再处理其他段。若多段同时就绪，一次传入多个 `--segment-id` 并设置 `--max-concurrency 5` 并发提交。已有taskId的段可异步查询和下载；全部段已有taskId后运行全段查询、下载、拼接命令，仅最终拼接等待全部段成功。已提交段只恢复原taskId；更新Prompt或分镜元数据时保留已完成段的记录，不用原始分镜代替尚未完成的目标分镜。
 
 执行prepare_prompt_handoff.py，直接复用最终板，不重绘或拆格生成。**视频生成继续同时传入最终目标分镜及已登记的原始用户达人图**；最终目标分镜作为人物整体造型、已按达人图匹配的服装、场景与动作的主参考，用户达人图继续校准身份和服装细节；每个Segment的视频Prompt必须写清此优先级和跨段服装一致性。完整读取 references/local_prompt_pipeline.md 和 references/prompt_language_policy.md；每段就绪时由当前智能体生成该段最终Prompt。不得固定3～5宏观阶段；完整覆盖本段shots、cuts、beats及utterances，包括未进入Storyboard的镜头。人物/产品集合来自本段全部镜头，再经replacementBindings映射；九格实际可见人物只是其中的子集。
 

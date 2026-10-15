@@ -67,6 +67,8 @@ def _selected_boards(manifest: Mapping[str, Any]) -> list[dict[str, Any]]:
     validation_mode = reference_audit.storyboard_validation_mode(dict(manifest))
     # A completed edited board can enter video generation while later boards
     # are still being edited. Never fall back to raw boards for missing edits.
+    if manifest.get("creator", {}).get("mode") and not edited:
+        raise ValueError("新任务必须先登记目标 edited Storyboard，不能用原始九宫格生成 Prompt。")
     selected = edited or original
     if edited and not all(int(item["storyboardId"]) in originals for item in edited):
         raise ValueError("最终 Storyboard 缺少对应原始 Storyboard。")
@@ -105,7 +107,7 @@ def _selected_boards(manifest: Mapping[str, Any]) -> list[dict[str, Any]]:
 def build_plan(manifest: Mapping[str, Any], cell_roots: Mapping[int, Path]) -> dict[str, Any]:
     windows = _segment_windows(manifest)
     boards = _selected_boards(manifest)
-    complete = len(boards) == len(manifest.get("storyboards", {}).get("original", []))
+    complete = len(boards) == len(windows) if windows else len(boards) == len(manifest.get("storyboards", {}).get("original", []))
     segments: list[dict[str, Any]] = []
     cursor = 0.0
     for board in boards:
@@ -229,7 +231,7 @@ def _all_segments_direct_metadata(manifest: Mapping[str, Any], boards: list[Mapp
     """Register every selected target Storyboard byte-for-byte without splitting or relabeling it."""
     windows = _segment_windows(manifest)
     results: list[dict[str, Any]] = []
-    complete = len(boards) == len(manifest.get("storyboards", {}).get("original", []))
+    complete = len(boards) == len(windows) if windows else len(boards) == len(manifest.get("storyboards", {}).get("original", []))
     cursor = 0.0
     for board in boards:
         segment_id = int(board.get("segmentId", board["storyboardId"]))

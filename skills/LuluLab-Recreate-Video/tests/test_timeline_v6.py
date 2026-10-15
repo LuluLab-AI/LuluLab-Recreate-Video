@@ -81,6 +81,7 @@ class TimelineTests(unittest.TestCase):
             for anchor in segment["anchors"]:
                 anchor.update(personPresent=False, personCount=0, creatorIds=[])
             data["storyboards"]["original"] = [dict(segment, storyboardId=1, file=str(board))]
+            data.pop("creator", None)  # Historical 16-cell manifest only.
             generation_manifest.save_manifest(path, data)
             prepare_prompt_handoff.prepare(path, root / "handoff")
             saved = generation_manifest.load_manifest(path)["storyboards"]["generation"][0]

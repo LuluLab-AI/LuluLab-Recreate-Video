@@ -133,13 +133,13 @@ def product_reference_required(data: dict[str, Any]) -> bool:
 
 
 def mark_skipped(manifest_path: Path, data: dict[str, Any], model: str, channels: dict[str, bool]) -> None:
-    data["videoGeneration"] = {
+    state = {
         "status": "skipped_no_local_cli",
         "generated": False,
         "model": model,
         "availability": channels,
     }
-    generation_manifest.save_manifest(manifest_path, data)
+    generation_manifest.update(manifest_path, lambda current: current.__setitem__("videoGeneration", state))
 
 
 def main() -> int:
@@ -200,8 +200,7 @@ def main() -> int:
             return 0
 
         initial_audit = reference_audit.audit(data, selected_segments)
-        data["referenceAudit"] = initial_audit
-        generation_manifest.save_manifest(manifest_path, data)
+        generation_manifest.update(manifest_path, lambda current: current.__setitem__("referenceAudit", initial_audit))
         if args.new_candidate and not args.quality_retry_approved:
             raise ValueError("创建新候选会再次提交视频任务；必须先取得用户同意并传入 --quality-retry-approved。")
         candidate_id = generation_manifest.next_candidate_id(data) if args.new_candidate else str(data.get("activeCandidate", "candidate-01"))
@@ -288,7 +287,8 @@ def main() -> int:
             "model": model,
             "availability": channels,
         }
-        generation_manifest.save_manifest(manifest_path, data)
+        generation_manifest.update(manifest_path, lambda current: current.update({
+            "referenceAudit": data["referenceAudit"], "videoGeneration": data["videoGeneration"]}))
 
         candidate_root = root / "candidates" / candidate_id
         results: list[dict[str, Any]] = []
@@ -436,15 +436,14 @@ def main() -> int:
                 )
         failures = [item for item in results if not item["ok"]]
         if failures:
-            current = generation_manifest.load_manifest(manifest_path)
-            current["videoGeneration"] = {
+            state = {
                 "status": "failed",
                 "generated": False,
                 "provider": provider,
                 "model": model,
                 "availability": channels,
             }
-            generation_manifest.save_manifest(manifest_path, current)
+            generation_manifest.update(manifest_path, lambda current: current.__setitem__("videoGeneration", state))
             print(json.dumps({"ok": False, "stage": "step5", "failures": failures}, ensure_ascii=False))
             return 2
 
@@ -479,8 +478,7 @@ def main() -> int:
             report_file.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             generation_manifest.set_quality_report(manifest_path, candidate_id, str(report_file))
 
-        current = generation_manifest.load_manifest(manifest_path)
-        current["videoGeneration"] = {
+        state = {
             "status": "success",
             "generated": True,
             "provider": provider,
@@ -488,7 +486,7 @@ def main() -> int:
             "availability": channels,
             "candidateId": candidate_id,
         }
-        generation_manifest.save_manifest(manifest_path, current)
+        generation_manifest.update(manifest_path, lambda current: current.__setitem__("videoGeneration", state))
         print(json.dumps({
             "ok": True, "generated": True, "provider": provider,
             "candidateId": candidate_id, "segments": results,

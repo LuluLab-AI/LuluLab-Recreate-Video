@@ -42,6 +42,7 @@ def manifest(root, bp=None):
     anchors = [{'timestamp': i, 'personPresent': True, 'personCount': 1, 'creatorIds': ['c2'], 'productPresent': False} for i in range(9)]
     board = dict(storyboardId=1, segmentId=1, globalStart=0, globalEnd=9, file=str(image), anchors=anchors)
     data['storyboards']['original'] = [board]
+    data['storyboards']['edited'] = [dict(board)]
     data['storyboards']['generation'] = [board]
     data['videoPrompts'] = {'segments': [dict(segmentId=1, storyboardIds=[1], creatorIds=['c1','c2'], productPresent=False, globalStart=0, globalEnd=9, duration=9, shotIds=['s1','s2'], beatIds=[], utteranceIds=['u1'], prompt='中文说明，对白：Keep this.') ]}
     gm.save_manifest(path, data)

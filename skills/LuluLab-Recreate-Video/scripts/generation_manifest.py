@@ -12,6 +12,15 @@ from pathlib import Path
 from typing import Any
 
 try:
+    import fcntl  # type: ignore[import-not-found]
+except ImportError:
+    fcntl = None  # type: ignore[assignment]
+try:
+    import msvcrt  # type: ignore[import-not-found]
+except ImportError:
+    msvcrt = None  # type: ignore[assignment]
+
+try:
     from scripts import interaction_language, service_privacy
 except ModuleNotFoundError:
     import interaction_language  # type: ignore[no-redef]
@@ -556,9 +565,25 @@ def command_init(args: argparse.Namespace) -> Path:
 
 
 def update(path: str | Path, mutator) -> Path:
-    data = load_manifest(path)
-    mutator(data)
-    return save_manifest(path, data)
+    value = Path(path).expanduser().resolve()
+    lock_path = value.with_suffix(value.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock_file:
+        if fcntl is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        elif msvcrt is not None:
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        try:
+            data = load_manifest(value)
+            mutator(data)
+            return save_manifest(value, data)
+        finally:
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            elif msvcrt is not None:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 def set_json_field(path: str | Path, field: str, json_file: str) -> Path:
@@ -982,9 +1007,27 @@ def set_prompts(path: str | Path, prompts_file: str) -> Path:
     if isinstance(adaptation, dict):
         prompt_record["adaptationPlan"] = adaptation
     def mutate(current: dict[str, Any]) -> None:
-        current["videoPrompts"] = prompt_record
-        if prompt_record.get("adaptationPlan"):
-            current.setdefault("product", {})["adaptationPlan"] = prompt_record["adaptationPlan"]
+        existing = current.get("videoPrompts", {})
+        merged = {int(item["segmentId"]): item for item in existing.get("segments", [])}
+        submitted = {int(item["segmentId"]) for item in current.get("videos", [])
+                     if item.get("taskId") or any(attempt.get("taskId") for attempt in item.get("attempts", []))}
+        for item in segments:
+            identifier = int(item["segmentId"])
+            if identifier in submitted and identifier in merged and merged[identifier] != item:
+                raise ValueError(f"Segment {identifier} 已提交视频任务，禁止覆盖对应 Prompt。")
+            merged[identifier] = item
+        record = {**existing, **prompt_record, "segments": [merged[key] for key in sorted(merged)]}
+        merged_file = source.parent / f"{source.stem}.registered.json"
+        merged_temp = merged_file.with_suffix(merged_file.suffix + ".tmp")
+        merged_temp.write_text(json.dumps({"videoPrompts": {"segments": record["segments"],
+                                             **({"qualitySpec": record["qualitySpec"]} if "qualitySpec" in record else {}),
+                                             **({"adaptationPlan": record["adaptationPlan"]} if "adaptationPlan" in record else {})}},
+                                          ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        merged_temp.replace(merged_file)
+        record["file"] = str(merged_file.resolve())
+        current["videoPrompts"] = record
+        if record.get("adaptationPlan"):
+            current.setdefault("product", {})["adaptationPlan"] = record["adaptationPlan"]
         current["workflowStatus"] = "step4_complete"
     return update(path, mutate)
 

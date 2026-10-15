@@ -9,7 +9,7 @@ import json
 import math
 import shutil
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -345,6 +345,10 @@ def main() -> int:
     parser.add_argument("--analysis-file")
     parser.add_argument("--model", default="seedance-2-fast")
     parser.add_argument("--max-workers", type=int, default=0, help="0 means up to 5 Segment renders in parallel.")
+    parser.add_argument("--segment-id", type=int, action="append", default=[],
+                        help="Render only these Segment IDs; repeat for multiple IDs.")
+    parser.add_argument("--stream-ready", action="store_true",
+                        help="Emit each completed board and its per-Segment metadata immediately.")
     parser.add_argument("--force-render", action="store_true", help="Ignore valid board caches and render again.")
     args = parser.parse_args()
 
@@ -361,6 +365,14 @@ def main() -> int:
         validate_model_windows(segments, args.model)
         if analysis:
             validate_against_analysis(segments, analysis)
+        if args.segment_id:
+            wanted = set(args.segment_id)
+            available = {int(item["segmentId"]) for item in segments}
+            if len(wanted) != len(args.segment_id) or not wanted <= available:
+                raise ValueError("--segment-id 包含重复或不存在的 Segment ID。")
+            segments_to_render = [item for item in segments if int(item["segmentId"]) in wanted]
+        else:
+            segments_to_render = segments
         workers = args.max_workers or min(5, len(segments))
         if not 1 <= workers <= 5:
             raise ValueError("--max-workers 必须介于1和5之间，或使用0采用默认并行度。")
@@ -386,11 +398,22 @@ def main() -> int:
                 "anchors": segment["anchors"],
             }
 
-        with ThreadPoolExecutor(max_workers=min(workers, len(segments))) as pool:
-            boards = list(pool.map(build, segments))
+        boards = []
+        with ThreadPoolExecutor(max_workers=min(workers, len(segments_to_render))) as pool:
+            futures = {pool.submit(build, segment): segment for segment in segments_to_render}
+            for future in as_completed(futures):
+                board = future.result()
+                boards.append(board)
+                if args.stream_ready:
+                    identifier = int(board["segmentId"])
+                    ready_metadata = output_dir / f"segment-{identifier:02d}-storyboard-metadata.json"
+                    ready_metadata.write_text(json.dumps({"schemaRevision": "5.1", "layout": "3x3", "boards": [board],
+                                                         "totalDuration": board["globalEnd"]}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                    print(json.dumps({"event": "storyboard_ready", "segmentId": identifier,
+                                      "metadata": str(ready_metadata), "board": board}, ensure_ascii=False), flush=True)
         boards.sort(key=lambda item: int(item["segmentId"]))
         metadata = output_dir / "storyboard-metadata.json"
-        metadata.write_text(json.dumps({"schemaRevision": "5.1", "layout": "3x3", "boards": boards, "totalDuration": segments[-1]["globalEnd"]}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        metadata.write_text(json.dumps({"schemaRevision": "5.1", "layout": "3x3", "boards": boards, "totalDuration": segments_to_render[-1]["globalEnd"]}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"ok": True, "layout": "3x3", "outputs": [item["file"] for item in boards], "metadata": str(metadata), "boards": boards}, ensure_ascii=False))
         return 0
     except (OSError, ValueError, RuntimeError, KeyError, json.JSONDecodeError) as exc:

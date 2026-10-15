@@ -9,6 +9,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts import entity_bindings
+except ModuleNotFoundError:
+    import entity_bindings
+
 
 def existing_file(value: Any) -> str | None:
     if not isinstance(value, str) or not value.strip():
@@ -36,6 +41,7 @@ def summarize(manifest: dict[str, Any], manifest_path: Path | None = None) -> di
     edited_ids = {int(item["storyboardId"]) for item in manifest.get("storyboards", {}).get("edited", [])}
     prompt_ids = {int(item["segmentId"]) for item in manifest.get("videoPrompts", {}).get("segments", [])}
     ready_actions = []
+    waiting_dependencies = []
     windows = manifest.get("benchmarkVideo", {}).get("analysis", {}).get("recommendedSegments", [])
     for window in windows:
         segment_id = int(window["segmentId"])
@@ -60,6 +66,30 @@ def summarize(manifest: dict[str, Any], manifest_path: Path | None = None) -> di
                         action = "fast_prepare_and_dispatch"
                 except (OSError, json.JSONDecodeError):
                     pass
+            if action is None:
+                original = manifest.get("storyboards", {}).get("original", [])
+                registered = any(int(item.get("storyboardId", -1)) == segment_id for item in original)
+                raw_dir = manifest_path.parent / "storyboards" / "original"
+                metadata = raw_dir / f"segment-{segment_id:02d}-storyboard-metadata.json"
+                if registered or metadata.is_file():
+                    context = entity_bindings.segment_context(manifest, {"segmentId": segment_id})
+                    needed = set(context["creatorIds"]) if context is not None else set()
+                    if context is None:
+                        for item in original:
+                            if int(item.get("storyboardId", -1)) == segment_id:
+                                needed.update(str(value) for anchor in item.get("anchors", [])
+                                              for value in anchor.get("creatorIds", []))
+                    creator = manifest.get("creator", {})
+                    if creator.get("mode") == "ai_generated":
+                        target_ids = set(creator.get("targetCreatorIds", []))
+                        registered_ids = {str(item.get("creatorId")) for item in manifest.get("creators", [])}
+                        missing = sorted((needed & target_ids) - registered_ids)
+                        if missing:
+                            waiting_dependencies.append({"segmentId": segment_id, "creatorIds": missing})
+                        else:
+                            action = "register_raw_and_prepare_image_edit"
+                    else:
+                        action = "register_raw_and_prepare_image_edit"
         if action:
             ready_actions.append({"segmentId": segment_id, "action": action})
     quality_path = existing_file(final_record.get("qualityReport"))
@@ -116,6 +146,7 @@ def summarize(manifest: dict[str, Any], manifest_path: Path | None = None) -> di
         "analysis": analysis,
         "segments": segments,
         "readySegmentActions": ready_actions,
+        "waitingDependencies": waiting_dependencies,
         "quality": quality,
     }
 

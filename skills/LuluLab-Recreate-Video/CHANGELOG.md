@@ -1,3 +1,10 @@
+## 1.3.7 — Segment 就绪即推进（2026-10-15）
+
+- 抽帧新增逐段就绪输出和单段选择；AI 身份板与抽帧可同时运行，先就绪段直接交接图片编辑。
+- 图片、Prompt、视频提交继续复用现有 CLI 和 Manifest；新任务禁止原始板代替目标板进入 Prompt。
+- Manifest 读改写加跨进程锁，视频状态更新保留其他 Segment；Fast 模式继续机械质检。
+- 保留旧 Manifest 兼容、原模型与任务恢复，不增加付费模型调用。
+
 ## 1.3.6 — Sync with recreate-video-agent (2026-10-15)
 
 - Align segment handoff, prompt language, full creator replacement, and caption postproduction with recreate-video-agent 1.3.6.

@@ -48,6 +48,7 @@ class PreparePromptHandoffTests(unittest.TestCase):
                 "layout": "3x3",
                 "anchors": anchors,
             }]
+            data["storyboards"]["edited"] = [dict(data["storyboards"]["original"][0])]
             generation_manifest.save_manifest(manifest, data)
 
             result = prepare_prompt_handoff.prepare(manifest, root / "handoff")
@@ -81,6 +82,7 @@ class PreparePromptHandoffTests(unittest.TestCase):
                 boards.append({"storyboardId": segment_id, "segmentId": segment_id, "file": str(board),
                                "globalStart": start, "globalEnd": end, "layout": "3x3", "anchors": anchors})
             data["storyboards"]["original"] = boards
+            data["storyboards"]["edited"] = [dict(board) for board in boards]
             generation_manifest.save_manifest(manifest, data)
 
             result = prepare_prompt_handoff.prepare(manifest, root / "handoff")
