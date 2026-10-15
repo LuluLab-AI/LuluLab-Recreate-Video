@@ -35,7 +35,7 @@ V2人物使用characterId，声源使用speakerId及可空characterId；每个�
 
 ## LuluLab Node.js CLI
 
-随包 Node.js CLI 支持 `upload <file>`、`task submit --workflow-id --input`、`task fetch --id`、`user --credits`。上传响应提供媒体 `url` 和 `mimeType`；签名上传 URL 的失效时间不作为媒体失效时间。
+随包 `scripts/lululab_cli.mjs` 支持 `upload <file>`、`task submit --workflow-id --input`、`task fetch --id`、`user --credits`。由 Node.js 20+ 执行；Key 通过 `LULULAB_API_KEY` 环境变量传入，不写入命令行或日志。上传响应提供媒体 `url` 和 `mimeType`；签名上传 URL 的失效时间不作为媒体失效时间。
 
 附件文档的拆解样例使用 `RecreateVideoPromptV2`，键名为 `benchmarkVideoUrl`，包含 `productBrief`、`creatorBrief`。本Skill的V3还依赖 `videoBlueprint`、`replicationPlan` 与 Planner 2 输出；不能只改工作流ID就替换为V2。客户端保留 `RecreateVideoPromptV3` 及原输入契约，直接交由 CLI 自动触发工作流，读取返回的拆解和规划结果；不要求用户部署工作流。
 

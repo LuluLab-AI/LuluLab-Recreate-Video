@@ -7,11 +7,12 @@ This Skill recreates an **authorized** commerce video using a source video, prod
 ## Key Features
 
 - Preprocesses and analyzes the source video through `RecreateVideoPromptV3`.
-- Builds segment storyboards, binds product and creator references, and presents prompts for confirmation.
+- Builds segment storyboards, binds product and creator references, and displays complete prompts before each ready segment is submitted.
 - Uses `ImageGenV2` for image work and `VideoGenV2` with Seedance2 Mini for video generation. It saves task IDs to recover work without blind paid retries.
 - New tasks default to one realistic 2×2 creator identity sheet per selected main creator, generated through the bundled LuluLab CLI with GPT Image 2.5 Sunburst. Choose the source creator or supply creator photos instead. The same sheet guides storyboard edits and every relevant video segment.
 - Registers all user supplied product and creator photos independently of replacement choices and audits the final video references before submission.
-- Keeps interaction language separate from the target video's language under the existing Skill rules.
+- Keeps interaction language separate from the target video's language; prompt instructions use Chinese for zh locales and English otherwise, while spoken lines retain the target language.
+- Hands off each ready segment immediately, saves its task ID, then joins completed segments. Rebuilds visible captions after joining when the source contains captions or promotional text.
 
 ## Requirements
 

@@ -344,7 +344,7 @@ def main() -> int:
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--analysis-file")
     parser.add_argument("--model", default="seedance-2-fast")
-    parser.add_argument("--max-workers", type=int, default=0, help="0 means up to 4 Segment renders in parallel.")
+    parser.add_argument("--max-workers", type=int, default=0, help="0 means up to 5 Segment renders in parallel.")
     parser.add_argument("--force-render", action="store_true", help="Ignore valid board caches and render again.")
     args = parser.parse_args()
 
@@ -361,9 +361,9 @@ def main() -> int:
         validate_model_windows(segments, args.model)
         if analysis:
             validate_against_analysis(segments, analysis)
-        workers = args.max_workers or min(4, len(segments))
-        if workers < 1:
-            raise ValueError("--max-workers 必须大于0，或使用0采用默认并行度。")
+        workers = args.max_workers or min(5, len(segments))
+        if not 1 <= workers <= 5:
+            raise ValueError("--max-workers 必须介于1和5之间，或使用0采用默认并行度。")
         video_digest = file_sha256(video)
 
         def build(segment: dict[str, Any]) -> dict[str, Any]:

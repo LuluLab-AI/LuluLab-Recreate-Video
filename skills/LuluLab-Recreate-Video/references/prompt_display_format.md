@@ -14,9 +14,7 @@ Use the returned absolute paths for backup links. Keep all prompts complete and 
 
 ## Choose the display path
 
-When prompt language matches interaction language, display every registered segment in order, followed by its full prompt in a separate text code block. Do not summarize, truncate, fold, or rewrite the prompt. Include only the exact prompt body inside the block. If the body contains triple backticks, use a longer outer fence.
-
-When prompt language differs from interaction language, default to a localized overview of all segments, their durations/source windows, a localized summary of each prompt, an explicit target-language label, and each unchanged text-file link. Do not automatically paste foreign-language prompt text into the chat. If the user explicitly requests complete inline prompts, show them unchanged with a clear target-language label and keep all surrounding explanation in the interaction language. This does not change targetLanguage or translate generation data.
+Prompt instructions must be Chinese for `zh` interaction locales and English for all other locales; target-language dialogue and permitted subtitles stay verbatim in the same prompt. Mixed-language dialogue does NOT make the prompt a foreign-language prompt. Display every registered segment's COMPLETE unchanged prompt by default, each in its own code block. Provide text-file backups as well. Never hide or replace full prompts with summaries just because the speech is in Thai/Portuguese/etc. Surrounding UI labels follow interaction locale (may differ from English prompt instructions). Do not modify stored prompts during display.
 
 ## Full inline example
 

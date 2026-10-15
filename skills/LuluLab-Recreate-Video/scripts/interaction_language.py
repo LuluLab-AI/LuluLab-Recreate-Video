@@ -30,3 +30,8 @@ def resolve_interaction_locale(
 def resolve_interaction_language(locale: Any = None) -> str:
     """Preserve every language instead of coercing all non-Chinese locales to English."""
     return resolve_interaction_locale(locale).split("-", 1)[0]
+
+
+def resolve_prompt_language(interaction_locale: Any = None) -> str:
+    """Return instruction language only; spoken text follows targetLanguage separately."""
+    return "zh" if resolve_interaction_language(interaction_locale) == "zh" else "en"

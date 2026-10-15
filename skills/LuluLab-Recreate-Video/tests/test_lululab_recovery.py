@@ -21,9 +21,12 @@ class RecoveryTests(unittest.TestCase):
         gm.save_manifest(m,data)
         return m,board
 
-    def invoke(self,m,board,submit,poll,*,mock_upload=True):
+    def invoke(self,m,board,submit,poll,*,dispatch_only=False,mock_upload=True,expected_error=None):
         with ExitStack() as s:
-            s.enter_context(patch.object(sys,'argv',['run_generation.py','--manifest',str(m),'--skip-concat','--generation-approved']))
+            argv=['run_generation.py','--manifest',str(m),'--skip-concat','--generation-approved']
+            if dispatch_only:
+                argv.extend(['--segment-id','1','--dispatch-only'])
+            s.enter_context(patch.object(sys,'argv',argv))
             s.enter_context(patch.object(gm,'validate_prompt_record'))
             s.enter_context(patch.object(cli,'lululab_cli_available',return_value=True))
             s.enter_context(patch.object(run.reference_audit,'audit',return_value={'passed':True,'warnings':[]}))
@@ -33,23 +36,35 @@ class RecoveryTests(unittest.TestCase):
                 s.enter_context(patch.object(cli,'upload_reference_images',return_value=[{'url':'https://example.com/board.png','mimeType':'image/png','expiredAt':''}]))
             st=s.enter_context(patch.object(cli,'submit_video',side_effect=submit))
             s.enter_context(patch.object(cli,'poll_task',side_effect=poll))
-            try: run.main()
-            except SystemExit: pass
+            try:
+                run.main()
+            except SystemExit as exc:
+                if expected_error is not None:
+                    self.assertIn(expected_error, str(exc))
+            else:
+                if expected_error is not None:
+                    self.fail(f'expected error containing {expected_error!r}')
             return st.call_count
 
     def test_unknown_submit_is_durable_and_cannot_resubmit(self):
         with tempfile.TemporaryDirectory() as td:
             m,board=self.setup_manifest(Path(td))
-            self.assertEqual(self.invoke(m,board,cli.LocalVideoCliError('connection lost'),AssertionError('no poll')),1)
+            self.assertEqual(self.invoke(m,board,cli.LocalVideoCliError('connection lost'),AssertionError('no poll'),dispatch_only=True),1)
             self.assertEqual(gm.load_manifest(m)['videos'][0]['status'],'submit_outcome_unknown')
             self.assertEqual(self.invoke(m,board,AssertionError('no resubmit'),AssertionError('no poll')),0)
+
+    def test_finalize_cannot_submit_unsubmitted_segment(self):
+        with tempfile.TemporaryDirectory() as td:
+            m,board=self.setup_manifest(Path(td))
+            self.assertEqual(self.invoke(m,board,AssertionError('no submit'),AssertionError('no poll'),expected_error='尚无任务ID'),0)
+            self.assertEqual(gm.load_manifest(m)['videos'],[])
 
     def test_poll_timeout_resumes_original_task(self):
         with tempfile.TemporaryDirectory() as td:
             m,board=self.setup_manifest(Path(td))
-            self.assertEqual(self.invoke(m,board,lambda *a,**k:'v1',cli.LocalVideoCliError('timeout')),1)
+            self.assertEqual(self.invoke(m,board,lambda *a,**k:'v1',AssertionError('no poll'),dispatch_only=True),1)
             saved=gm.load_manifest(m)['videos'][0]
-            self.assertEqual((saved['status'],saved['taskId']),('querying','v1'))
+            self.assertEqual((saved['status'],saved['taskId']),('submitted','v1'))
             self.assertEqual(self.invoke(m,board,AssertionError('no resubmit'),cli.LocalVideoCliError('timeout')),0)
 
     def test_poll_resume_does_not_reupload_references(self):
@@ -57,7 +72,7 @@ class RecoveryTests(unittest.TestCase):
             m,board=self.setup_manifest(Path(td))
             media=[{'url':'https://example.com/board.png','mimeType':'image/png','expiredAt':''}]
             with patch.object(cli,'upload_reference_images',return_value=media) as uploads:
-                self.assertEqual(self.invoke(m,board,lambda *a,**k:'v1',cli.LocalVideoCliError('timeout'),mock_upload=False),1)
+                self.assertEqual(self.invoke(m,board,lambda *a,**k:'v1',AssertionError('no poll'),dispatch_only=True,mock_upload=False),1)
                 self.assertEqual(self.invoke(m,board,AssertionError('no resubmit'),cli.LocalVideoCliError('timeout'),mock_upload=False),0)
             self.assertEqual(uploads.call_count,1)
 

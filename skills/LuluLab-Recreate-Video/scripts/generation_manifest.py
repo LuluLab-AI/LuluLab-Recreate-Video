@@ -884,9 +884,13 @@ def validate_prompt_record(prompts: dict[str, Any], data: dict[str, Any]) -> Non
         shots = bp["逐镜头拆解"]
         beats = bp["节奏结构"]["dramaticBeats"]
         utterances = [u for s in shots for u in s["声音"]["utterances"]]
-        if len(segments) != len(windows):
-            raise ValueError("Prompt必须保留锁定Segment数量")
-        for segment, window in zip(segments, windows):
+        if len(segments) > len(windows):
+            raise ValueError("Prompt超过锁定Segment数量")
+        windows_by_id = {int(window["segmentId"]): window for window in windows}
+        for segment in segments:
+            window = windows_by_id.get(int(segment["segmentId"]))
+            if window is None:
+                raise ValueError(f"Segment {segment['segmentId']} 不在锁定时间窗内")
             if any(segment.get(k) != window.get(k) for k in ("segmentId", "globalStart", "globalEnd", "duration")):
                 raise ValueError("Prompt改变了锁定时间窗")
             if segment.get("storyboardIds") != [window["segmentId"]]:
@@ -895,6 +899,8 @@ def validate_prompt_record(prompts: dict[str, Any], data: dict[str, Any]) -> Non
                 expected = {i[identifier] for i in items if i["start"] < window["globalEnd"] and i["end"] > window["globalStart"]}
                 if set(segment.get(field, [])) != expected:
                     raise ValueError(f"Segment {window['segmentId']} 的{field}遗漏或越界")
+            if int(window["segmentId"]) not in {int(board["segmentId"]) for board in generation_boards}:
+                raise ValueError(f"Segment {window['segmentId']} 尚无已完成的生成分镜")
     try:
         from scripts import entity_bindings
     except ModuleNotFoundError:

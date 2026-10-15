@@ -395,7 +395,7 @@ def main() -> int:
             canvas_name = args.project_name or root.name
             if not workspace_id:
                 # 未指定工作区时自动创建，避免为了拿 workspaceId 来回往返。
-                workspace_id = client.create_workspace(canvas_name, "LuluLab-Recreate-Video 自动创建")
+                workspace_id = client.create_workspace(canvas_name, "recreate-video-agent 自动创建")
             project_uuid = client.create_project(canvas_name, int(workspace_id))
             project = client.project_info(project_uuid)
         known_nodes = node_index(project)

@@ -17,7 +17,7 @@ def existing_file(value: Any) -> str | None:
     return str(path) if path.is_file() and path.stat().st_size > 0 else None
 
 
-def summarize(manifest: dict[str, Any]) -> dict[str, Any]:
+def summarize(manifest: dict[str, Any], manifest_path: Path | None = None) -> dict[str, Any]:
     final_record = manifest.get("finalVideo") or {}
     final_path = existing_file(final_record.get("file"))
     videos = manifest.get("videos") or []
@@ -32,6 +32,36 @@ def summarize(manifest: dict[str, Any]) -> dict[str, Any]:
             "file": existing_file(item.get("output_file")),
         }
         segments.append(entry)
+    video_by_id = {int(item["segmentId"]): item for item in segments if item.get("segmentId") is not None}
+    edited_ids = {int(item["storyboardId"]) for item in manifest.get("storyboards", {}).get("edited", [])}
+    prompt_ids = {int(item["segmentId"]) for item in manifest.get("videoPrompts", {}).get("segments", [])}
+    ready_actions = []
+    windows = manifest.get("benchmarkVideo", {}).get("analysis", {}).get("recommendedSegments", [])
+    for window in windows:
+        segment_id = int(window["segmentId"])
+        video = video_by_id.get(segment_id, {})
+        if video.get("taskId") or video.get("file"):
+            continue
+        action = None
+        if segment_id in prompt_ids:
+            action = "dispatch_video"
+        elif segment_id in edited_ids:
+            action = "prepare_prompt_and_dispatch"
+        elif manifest_path is not None:
+            edited_dir = manifest_path.parent / "storyboards" / "edited"
+            final_file = edited_dir / f"segment-{segment_id:02d}-final.png"
+            report_file = edited_dir / f"segment-{segment_id:02d}-report.json"
+            if existing_file(str(final_file)):
+                action = "register_storyboard_and_dispatch"
+            elif report_file.is_file():
+                try:
+                    report = json.loads(report_file.read_text(encoding="utf-8"))
+                    if report.get("status") == "success":
+                        action = "fast_prepare_and_dispatch"
+                except (OSError, json.JSONDecodeError):
+                    pass
+        if action:
+            ready_actions.append({"segmentId": segment_id, "action": action})
     quality_path = existing_file(final_record.get("qualityReport"))
     quality = None
     if quality_path:
@@ -67,6 +97,8 @@ def summarize(manifest: dict[str, Any]) -> dict[str, Any]:
         status = "video_ready"
     elif final_record.get("file"):
         status = "final_file_missing"
+    elif any(item.get("status") in {"terminal_failed", "failed", "failure", "error", "cancelled", "timeout"} for item in segments):
+        status = "segment_terminal_failed"
     elif any(item.get("taskId") and not item.get("file") for item in segments):
         status = "video_task_pending"
     elif segments and all(item.get("file") for item in segments):
@@ -83,6 +115,7 @@ def summarize(manifest: dict[str, Any]) -> dict[str, Any]:
         "finalVideo": final_path,
         "analysis": analysis,
         "segments": segments,
+        "readySegmentActions": ready_actions,
         "quality": quality,
     }
 
@@ -90,13 +123,20 @@ def summarize(manifest: dict[str, Any]) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True)
+    parser.add_argument("--assert-no-ready-segments", action="store_true", help="Exit 2 when a completed Segment needs immediate handoff before waiting.")
+    parser.add_argument("--assert-can-wait", action="store_true", help="Exit 2 for ready Segment handoff or 3 for terminal video failure.")
     args = parser.parse_args()
     try:
         manifest_path = Path(args.manifest).expanduser().resolve()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
             raise ValueError("Manifest must be a JSON object.")
-        print(json.dumps(summarize(manifest), ensure_ascii=False))
+        result = summarize(manifest, manifest_path)
+        print(json.dumps(result, ensure_ascii=False))
+        if (args.assert_no_ready_segments or args.assert_can_wait) and result["readySegmentActions"]:
+            return 2
+        if args.assert_can_wait and result["status"] == "segment_terminal_failed":
+            return 3
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.exit(1, f"Cannot inspect saved task: {exc}\n")

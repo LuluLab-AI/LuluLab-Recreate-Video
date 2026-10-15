@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +16,15 @@ from scripts import generation_manifest, run_generation  # noqa: E402
 
 
 class RunGenerationSkipTests(unittest.TestCase):
+    def test_dispatch_requires_explicit_segment_and_skip_concat(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "run_generation.py"),
+             "--manifest", "/missing.json", "--dispatch-only"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--segment-id", result.stderr)
+
     def test_single_segment_without_user_creator_does_not_submit_creator_image(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

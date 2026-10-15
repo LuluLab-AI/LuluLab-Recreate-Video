@@ -402,11 +402,19 @@ def audit(manifest: dict[str, Any], segments: list[dict[str, Any]] | None = None
     validation_mode = storyboard_validation_mode(manifest)
     results: list[dict[str, Any]] = []
     warnings: list[str] = []
-    for expected_id, segment in enumerate(prompts, 1):
+    valid_segment_ids = {
+        int(item["segmentId"])
+        for item in manifest.get("benchmarkVideo", {}).get("analysis", {}).get("recommendedSegments", [])
+    }
+    previous_id = 0
+    for position, segment in enumerate(prompts, 1):
         identifier = int(segment.get("segmentId", -1))
         selected = segment.get("storyboardIds")
-        if identifier != expected_id or not isinstance(selected, list) or len(selected) != 1:
-            raise ValueError("每个连续Segment必须且只能引用一张最终Storyboard。")
+        if (identifier <= previous_id
+                or (valid_segment_ids and identifier not in valid_segment_ids)
+                or not isinstance(selected, list) or len(selected) != 1):
+            raise ValueError("每个已选Segment必须按顺序且只能引用一张最终Storyboard。")
+        previous_id = identifier
         board_id = int(selected[0])
         board = by_id.get(board_id)
         if board is None or int(board.get("segmentId", -1)) != identifier:

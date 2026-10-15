@@ -65,9 +65,11 @@ def _selected_boards(manifest: Mapping[str, Any]) -> list[dict[str, Any]]:
         raise ValueError("必须先登记原始 Storyboard。")
     originals = {int(item["storyboardId"]): item for item in original}
     validation_mode = reference_audit.storyboard_validation_mode(dict(manifest))
+    # A completed edited board can enter video generation while later boards
+    # are still being edited. Never fall back to raw boards for missing edits.
     selected = edited or original
-    if len(selected) != len(originals):
-        raise ValueError("最终 Storyboard 必须与原始 Storyboard 数量一致。")
+    if edited and not all(int(item["storyboardId"]) in originals for item in edited):
+        raise ValueError("最终 Storyboard 缺少对应原始 Storyboard。")
     for item in selected:
         identifier = int(item["storyboardId"])
         if identifier not in originals:
@@ -102,9 +104,11 @@ def _selected_boards(manifest: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def build_plan(manifest: Mapping[str, Any], cell_roots: Mapping[int, Path]) -> dict[str, Any]:
     windows = _segment_windows(manifest)
+    boards = _selected_boards(manifest)
+    complete = len(boards) == len(manifest.get("storyboards", {}).get("original", []))
     segments: list[dict[str, Any]] = []
     cursor = 0.0
-    for board in _selected_boards(manifest):
+    for board in boards:
         storyboard_id = int(board["storyboardId"])
         segment_id = int(board.get("segmentId", storyboard_id))
         if "globalStart" in board and "globalEnd" in board:
@@ -113,8 +117,8 @@ def build_plan(manifest: Mapping[str, Any], cell_roots: Mapping[int, Path]) -> d
             start, end = windows[segment_id]
         else:
             raise ValueError(f"Storyboard {storyboard_id} 缺少可确定的 Segment 时间窗。")
-        if abs(start - cursor) > .01 or end <= start:
-            raise ValueError("Segment 时间窗必须从0开始连续、无重叠、无空档。")
+        if end <= start or start < cursor - .01 or (complete and abs(start - cursor) > .01):
+            raise ValueError("已完成 Segment 时间窗不能重叠；全部完成后必须从0开始连续。")
         anchors = board.get("anchors")
         if not isinstance(anchors, list) or len(anchors) not in (9, 16):
             raise ValueError(f"Storyboard {storyboard_id} 必须包含9或16个 anchors。")
@@ -144,7 +148,7 @@ def build_plan(manifest: Mapping[str, Any], cell_roots: Mapping[int, Path]) -> d
         segments.append(segment)
         cursor = end
     expected = manifest.get("userConfig", {}).get("duration")
-    if expected is not None and abs(cursor - float(expected)) > .01:
+    if expected is not None and complete and abs(cursor - float(expected)) > .01:
         raise ValueError("最终 Storyboard 未覆盖完整复刻时长。")
     return {"segments": segments}
 
@@ -225,6 +229,7 @@ def _all_segments_direct_metadata(manifest: Mapping[str, Any], boards: list[Mapp
     """Register every selected target Storyboard byte-for-byte without splitting or relabeling it."""
     windows = _segment_windows(manifest)
     results: list[dict[str, Any]] = []
+    complete = len(boards) == len(manifest.get("storyboards", {}).get("original", []))
     cursor = 0.0
     for board in boards:
         segment_id = int(board.get("segmentId", board["storyboardId"]))
@@ -234,13 +239,13 @@ def _all_segments_direct_metadata(manifest: Mapping[str, Any], boards: list[Mapp
             start, end = windows[segment_id]
         else:
             raise ValueError(f"Storyboard {board['storyboardId']} 缺少可确定的 Segment 时间窗。")
-        if abs(start - cursor) > .01 or end <= start:
-            raise ValueError("Segment 时间窗必须从0开始连续、无重叠、无空档。")
+        if end <= start or start < cursor - .01 or (complete and abs(start - cursor) > .01):
+            raise ValueError("已完成 Segment 时间窗不能重叠；全部完成后必须从0开始连续。")
         direct = _single_segment_direct_metadata(board, start, end)["boards"][0]
         results.append(direct)
         cursor = end
     expected = manifest.get("userConfig", {}).get("duration")
-    if expected is not None and abs(cursor - float(expected)) > .01:
+    if expected is not None and complete and abs(cursor - float(expected)) > .01:
         raise ValueError("最终 Storyboard 未覆盖完整复刻时长。")
     return {"schemaRevision": "5.4", "layout": "3x3", "boards": results, "totalDuration": cursor}
 

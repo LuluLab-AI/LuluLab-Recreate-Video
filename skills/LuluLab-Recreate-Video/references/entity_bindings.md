@@ -34,6 +34,6 @@ python3 scripts/generation_manifest.py set-replacement-bindings --manifest <mani
 
 新任务默认`creator.mode=ai_generated`：根据Blueprint角色功能仅选择主要带货达人，为其设置新的目标creatorId并用`mode=replace`绑定；其他人物仍各自保留独立映射。用`set-creator-mode --mode ai_generated --creator-id <targetId>`登记目标，随后由`creator_identity.py`为每个目标一次生成四视图，并在分镜编辑前登记。单段同样适用。用户明确选择`keep_source`或`user_provided`时不生成AI图。用户上传图必须独立登记并参与相关视频请求，不能由替换选择自动过滤。缺失`creator.mode`的旧任务沿用原单段/多段策略。
 
-prepare_prompt_handoff.py在replication-package.json写入entityContexts：包含全镜头、来源IDs、目标creatorIds、替换映射及产品图清单。使用它编写完整Prompt，九格实际可见人物只是完整集合的子集。对白原文保留，目标语言转换在最终Prompt进行；说明文也使用目标视频语言，不做语言校验。
+prepare_prompt_handoff.py在replication-package.json写入entityContexts：包含全镜头、来源IDs、目标creatorIds、替换映射及产品图清单。使用它编写完整Prompt，九格实际可见人物只是完整集合的子集。对白原文保留，目标语言转换在最终Prompt进行；说明文使用 interactionLocale 对应的中文/英文，对白和允许的字幕保持目标视频语言；生成时进行非阻塞的语言自查，不翻译引用内容。
 
 分镜编辑后的fast/strict检查和视频生成后检查完全沿用原规则。

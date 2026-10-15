@@ -151,6 +151,7 @@ def main() -> int:
         default="auto",
     )
     parser.add_argument("--skip-concat", action="store_true")
+    parser.add_argument("--dispatch-only", action="store_true", help="Submit ready segments and save task IDs without waiting for completion.")
     parser.add_argument("--new-candidate", action="store_true")
     parser.add_argument("--quality-retry-approved", action="store_true")
     parser.add_argument("--full-quality-review", action="store_true", help="生成后执行完整视觉扫描和原片/成片对齐图；默认仅做快速技术质检。")
@@ -158,8 +159,10 @@ def main() -> int:
     parser.add_argument("--segment-id", type=int, action="append", default=[])
     parser.add_argument("--max-concurrency", type=int, default=5)
     args = parser.parse_args()
-    if not 1 <= args.max_concurrency <= 8:
-        parser.error("--max-concurrency 必须介于 1 和 8 之间。")
+    if not 1 <= args.max_concurrency <= 5:
+        parser.error("--max-concurrency 必须介于 1 和 5 之间。")
+    if args.dispatch_only and (not args.segment_id or not args.skip_concat):
+        parser.error("逐段首次提交必须同时指定 --segment-id、--skip-concat 和 --dispatch-only。")
 
     lock_handle = None
     try:
@@ -204,8 +207,23 @@ def main() -> int:
         candidate_id = generation_manifest.next_candidate_id(data) if args.new_candidate else str(data.get("activeCandidate", "candidate-01"))
         existing_videos = {int(item["segmentId"]): item for item in data.get("videos", [])}
 
+        if not args.dispatch_only:
+            missing_ids = []
+            for segment in selected_segments:
+                segment_id = int(segment["segmentId"])
+                previous = selected_attempt(existing_videos.get(segment_id, {}), candidate_id)
+                output = Path(str(previous.get("output_file", ""))).expanduser()
+                has_output = previous.get("status") == "success" and output.is_file() and output.stat().st_size > 0
+                if not has_output and not str(previous.get("taskId", "")).strip():
+                    missing_ids.append(segment_id)
+            if missing_ids:
+                raise ValueError(
+                    f"Segment {', '.join(map(str, missing_ids))} 尚无任务ID；查询/拼接命令只处理已提交任务。"
+                    "请在每段分镜及Prompt就绪后，用 --segment-id <ID> --skip-concat --dispatch-only 提交。"
+                )
+
         requires_submit = False
-        for segment in selected_segments:
+        for segment in selected_segments if args.dispatch_only else []:
             segment_id = int(segment["segmentId"])
             previous = selected_attempt(existing_videos.get(segment_id, {}), candidate_id)
             previous_output = Path(str(previous.get("output_file", ""))).expanduser()
@@ -302,60 +320,61 @@ def main() -> int:
                 continue
             if previous.get("status") in {"submit_pending", "submit_outcome_unknown", "terminal_failed"}:
                 raise ValueError(f"Segment {segment_id} 已有提交或失败记录；禁止自动重新提交，请核查原任务或明确授权新候选。")
-            new_plans.append(plan)
+            if args.dispatch_only:
+                new_plans.append(plan)
 
-        def submit(plan: dict[str, Any]) -> tuple[dict[str, Any], str]:
-            segment = plan["segment"]
-            task_id = local_video_cli.submit_video(
-                provider,
-                model,
-                str(segment["prompt"]),
-                int(segment["duration"]),
-                reference_files=plan["files"],
-                resolution=resolution,
-                aspect_ratio=str(config.get("aspectRatio", "9:16")),
-                reference_media=plan.get("referenceMedia"),
-            )
-            return plan, task_id
+        if args.dispatch_only:
+            def submit(plan: dict[str, Any]) -> tuple[dict[str, Any], str]:
+                segment = plan["segment"]
+                task_id = local_video_cli.submit_video(
+                    provider, model, str(segment["prompt"]), int(segment["duration"]),
+                    reference_files=plan["files"], resolution=resolution,
+                    aspect_ratio=str(config.get("aspectRatio", "9:16")),
+                    reference_media=plan.get("referenceMedia"),
+                )
+                return plan, task_id
 
-        submit_errors: list[str] = []
-        if new_plans:
-            cache_path = root / "analysis" / "reference-upload-cache.json"
-            # Upload each distinct content digest only once across all segments.
-            # Keep a single cache writer and restore original reference order.
-            all_files = [Path(value) for plan in new_plans for value in plan["files"]]
-            uploaded_media = local_video_cli.upload_reference_images(
-                all_files, cache_path=cache_path, max_workers=args.max_concurrency)
-            cursor = 0
-            for plan in new_plans:
-                count = len(plan["files"])
-                plan["referenceMedia"] = uploaded_media[cursor:cursor + count]
-                cursor += count
-                if len(plan["referenceMedia"]) != count:
-                    raise ValueError("最终 referenceImages 数量与审计通过的文件数量不一致。")
-            for plan in new_plans:
-                generation_manifest.set_video(manifest_path, int(plan["segment"]["segmentId"]), "submit_pending", candidateId=candidate_id, provider=provider, model=model, inputFingerprint=plan["inputFingerprint"])
-            with ThreadPoolExecutor(max_workers=min(len(new_plans), args.max_concurrency)) as pool:
-                futures = {pool.submit(submit, plan): plan for plan in new_plans}
-                for future in as_completed(futures):
-                    try:
-                        plan, task_id = future.result()
-                    except service_privacy.AuthorizationUnavailableError:
-                        raise
-                    except (OSError, ValueError, local_video_cli.LocalVideoCliError, server_video_analysis.AnalysisError) as exc:
-                        generation_manifest.set_video(manifest_path, int(futures[future]["segment"]["segmentId"]), "submit_outcome_unknown", candidateId=candidate_id, provider=provider, error=service_privacy.public_error(str(exc), "提交结果未知。"))
-                        submit_errors.append(f"Segment {futures[future]['segment'].get('segmentId')} submit失败：{exc}")
-                        continue
-                    segment = plan["segment"]
-                    segment_id = int(segment["segmentId"])
-                    generation_manifest.set_video(
-                        manifest_path, segment_id, "submitted", candidateId=candidate_id,
-                        taskId=task_id, provider=provider, model=model, resolution=resolution,
-                        prompt=str(segment["prompt"]), inputFingerprint=plan["inputFingerprint"],
-                    )
-                    pending.append({**plan, "taskId": task_id})
-        if submit_errors:
-            raise ValueError("；".join(submit_errors) + "。其他已返回的任务ID已保存；再次运行只恢复这些ID。")
+            submit_errors: list[str] = []
+            if new_plans:
+                cache_path = root / "analysis" / "reference-upload-cache.json"
+                for plan in new_plans:
+                    plan["referenceMedia"] = local_video_cli.upload_reference_images(
+                        [Path(value) for value in plan["files"]], cache_path=cache_path)
+                    if len(plan["referenceMedia"]) != len(plan["files"]):
+                        raise ValueError("最终 referenceImages 数量与审计通过的文件数量不一致。")
+                for plan in new_plans:
+                    generation_manifest.set_video(manifest_path, int(plan["segment"]["segmentId"]), "submit_pending", candidateId=candidate_id, provider=provider, model=model, inputFingerprint=plan["inputFingerprint"])
+                with ThreadPoolExecutor(max_workers=min(len(new_plans), args.max_concurrency)) as pool:
+                    futures = {pool.submit(submit, plan): plan for plan in new_plans}
+                    for future in as_completed(futures):
+                        try:
+                            plan, task_id = future.result()
+                        except service_privacy.AuthorizationUnavailableError:
+                            raise
+                        except (OSError, ValueError, local_video_cli.LocalVideoCliError, server_video_analysis.AnalysisError) as exc:
+                            generation_manifest.set_video(manifest_path, int(futures[future]["segment"]["segmentId"]), "submit_outcome_unknown", candidateId=candidate_id, provider=provider, error=service_privacy.public_error(str(exc), "提交结果未知。"))
+                            submit_errors.append(f"Segment {futures[future]['segment'].get('segmentId')} submit失败：{exc}")
+                            continue
+                        segment = plan["segment"]
+                        segment_id = int(segment["segmentId"])
+                        generation_manifest.set_video(
+                            manifest_path, segment_id, "submitted", candidateId=candidate_id,
+                            taskId=task_id, provider=provider, model=model, resolution=resolution,
+                            prompt=str(segment["prompt"]), inputFingerprint=plan["inputFingerprint"],
+                        )
+                        pending.append({**plan, "taskId": task_id})
+            if submit_errors:
+                raise ValueError("；".join(submit_errors) + "。其他已返回的任务ID已保存；再次运行只恢复这些ID。")
+            print(json.dumps({
+                "ok": True, "status": "dispatched", "candidateId": candidate_id,
+                "segments": [
+                    {"segmentId": int(plan["segment"]["segmentId"]), "taskId": plan["taskId"]}
+                    for plan in pending
+                ],
+                "reusedSegments": [int(item["segment"]["segmentId"]) for item in results],
+                "manifest": str(manifest_path),
+            }, ensure_ascii=False))
+            return 0
 
         for plan in pending:
             generation_manifest.set_video(

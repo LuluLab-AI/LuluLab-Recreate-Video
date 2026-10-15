@@ -1,3 +1,9 @@
+## 1.3.6 — Sync with recreate-video-agent (2026-10-15)
+
+- Align segment handoff, prompt language, full creator replacement, and caption postproduction with recreate-video-agent 1.3.6.
+- Keep LuluLab Node.js CLI as the sole analysis, image, and video service channel; preserve its task recovery and media upload behavior.
+- Verify with host preflight, 182 local tests, and package validation. No paid tasks were submitted.
+
 ## 1.3.1 — Skill rename (2026-10-14)
 
 - Rename the installed Skill, frontmatter, invocation, metadata, source folder and installation instructions to `LuluLab-Recreate-Video`.
