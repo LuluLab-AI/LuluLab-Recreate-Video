@@ -322,7 +322,7 @@ export async function run({manifest, benchmark = null, benchmarkUrl = null, resu
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2), option = name => args[args.indexOf(name) + 1];
+    const args = process.argv.slice(2), option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
     console.log(JSON.stringify(await run({manifest: option('--manifest'), benchmark: option('--benchmark'),
       benchmarkUrl: option('--benchmark-url'), resumeTaskId: option('--resume-task-id'),
       pollIntervalMs: Number(option('--poll-interval') || 5) * 1000,

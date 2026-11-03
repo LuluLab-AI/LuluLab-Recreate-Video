@@ -138,7 +138,7 @@ export async function analyze(manifestPath, {resume = false, retryFailed = false
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2), opt = name => args[args.indexOf(name) + 1];
+    const args = process.argv.slice(2), opt = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
     const manifest = opt('--manifest'); if (!manifest) throw Error('需要 --manifest');
     console.log(JSON.stringify(await analyze(manifest, {resume: args.includes('--resume'),
       retryFailed: args.includes('--retry-failed'), intervalMs: Number(opt('--poll-interval') || 5) * 1000,

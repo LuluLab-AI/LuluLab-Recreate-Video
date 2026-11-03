@@ -160,7 +160,7 @@ export async function run(manifestPath, creatorId, role = null, {registerReviewe
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2), option = name => args[args.indexOf(name) + 1];
+    const args = process.argv.slice(2), option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
     const manifest = option('--manifest'), creatorId = option('--creator-id');
     if (!manifest || !creatorId) throw Error('需要 --manifest 和 --creator-id');
     const result = await run(manifest, creatorId, option('--role'), {registerReviewed: args.includes('--register-reviewed')});

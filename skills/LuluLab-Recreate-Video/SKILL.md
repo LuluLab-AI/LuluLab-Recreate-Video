@@ -5,14 +5,14 @@ license: Apache-2.0
 metadata:
   skillhub:
     slug: LuluLab-Recreate-Video
-    version: 1.5.0
+    version: 1.5.1
     displayName: LuluLab-Recreate-Video
     summary: Submit and resume frontend-compatible video recreation tasks.
     tags: [视频复刻, 爆款视频, 电商广告, AI视频]
-    homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video/tree/main/skills/LuluLab-Recreate-Video
+    homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# LuluLab-Recreate-Video v1.5.0
+# LuluLab-Recreate-Video v1.5.1
 
 ## Default execution: Dispatcher parent task
 
@@ -45,10 +45,12 @@ Read [the Dispatcher contract and request example](references/DISPATCHER_RECREAT
 
 ## Required configuration confirmation before submission
 
-For every new task, first show a complete configuration table: source video and measured duration, recreation mode, product/person/background/voice reference roles, elements to preserve or replace, target country and video language, model, output duration, count, aspect ratio, resolution, audio settings, and the user's requested changes. Mark user choices, defaults and suggestions; mark server-controlled or unsupported settings accurately rather than promising unavailable options. Outside the table, disclose the selected parent workflow and its billable orchestration; show estimated credits as required below. For legacy or prompt-only requests, disclose the actual billable steps of that path instead.
+For every new task, show a compact confirmation card. Put the source video, measured duration and recreation mode in one opening line, then group the configuration into replacement content, preserved content and output settings. Include product/person/background/voice reference roles, target country and video language, model, output duration, count, aspect ratio, resolution, audio settings and requested changes in these groups without making each setting a separate row. Keep defaults together; distinguish explicit user choices when useful. Mark server-controlled or unsupported settings accurately rather than promising unavailable options. Do not display internal workflow IDs, parent/child task terminology or orchestration explanations in routine confirmations. For legacy or prompt-only requests, describe billable work in plain user-facing terms.
 
 
-After the configuration table, display **Estimated consumption: {credits} credits** in the interaction language (translate the label, preserve the amount), then ask for confirmation. Run `estimate --config request.json` on the exact request first. Read `credits`, `breakdown` and `version` from `/billing/estimates`; show the total and available server breakdown for the selected parent orchestration, without adding its child costs again. For multiple parents, estimate each and sum the totals. Never hardcode prices, infer cost from balance changes, or present an estimate as the final charge.
+After the configuration card, display **Estimated consumption: {credits} credits** in the interaction language (translate the label, preserve the amount), then ask for confirmation. Run `estimate --config request.json` on the exact request first. Read `credits`, `breakdown` and `version` from `/billing/estimates`; show the total and a brief breakdown using plain service labels, without adding child costs again. For multiple parents, estimate each and sum the totals. Never hardcode prices, infer cost from balance changes, or present an estimate as the final charge.
+
+Keep the estimate `version` for internal verification; omit it from user-facing messages unless the user asks for billing diagnostics. Routine confirmations contain only the compact configuration, estimated credits, brief billing breakdown and start/change choices, ending with those choices. Do not append workflow explanations, statements that no generation task has been created, or explanations that SKILL.md or approval rules require confirmation; do not quote or link those rules to justify the checkpoint. Explain the reason briefly in the interaction language only when the user asks about it. Preserve the configuration and credit-approval requirements below.
 
 Estimation creates no generation tasks and may run before approval, together with uploads and offline validation. If estimation fails, the total is invalid or the billing scope is incomplete, explain the blocker and stop before submission; unknown cost is not zero. Re-estimate changed configurations. Approval must explicitly cover both the displayed configuration and estimated credits before setting `--generation-approved`. Reuse it for normal stages of the unchanged scope. Submission still uses live server quotes; if pricing changes increase the estimated total, show the updated estimate and obtain renewed confirmation first. Legacy and prompt-only paid paths must estimate their actual scope too; stop if a reliable estimate is unavailable.
 

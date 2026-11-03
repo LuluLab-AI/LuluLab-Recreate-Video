@@ -8,6 +8,49 @@ import { LuluLabClient, resolveApiKey, imageMimeType } from '../scripts/lululab_
 
 const response = value => new Response(JSON.stringify(value), { status: 200 });
 
+test('asset upload returns final media metadata and keeps credentials off multipart POST', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'lululab-asset-'));
+  try {
+    const file = join(root, 'product.jpg');
+    const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    await writeFile(file, bytes);
+    const calls = [];
+    const client = new LuluLabClient({ apiKey: 'fake-key', fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), ...options });
+      return calls.length === 1
+        ? response({ presignedUrl: 'https://asset.example/upload?signature=test', mimeType: 'application/octet-stream' })
+        : response({ location: 'https://media.example/product.png', mimeType: 'application/octet-stream' });
+    }});
+    assert.deepEqual(await client.upload(file), { url: 'https://media.example/product.png', mimeType: 'image/png' });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].method, 'POST');
+    assert.equal(calls[1].headers, undefined);
+    assert.equal(calls[1].redirect, 'error');
+    assert.ok(calls[1].body instanceof FormData);
+    const uploaded = calls[1].body.get('file');
+    assert.equal(uploaded.name, 'product.jpg');
+    assert.equal(uploaded.type, 'image/png');
+    assert.deepEqual(Buffer.from(await uploaded.arrayBuffer()), bytes);
+  } finally { await rm(root, { recursive: true }); }
+});
+
+test('asset upload rejects invalid media responses without retrying', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'lululab-asset-invalid-'));
+  try {
+    const file = join(root, 'video.mp4');
+    await writeFile(file, 'video-bytes');
+    for (const result of [() => new Response('not-json'), () => response({ mimeType: 'video/mp4' }),
+      () => response({ location: 'file:///private/video.mp4', mimeType: 'video/mp4' }),
+      () => response({ location: 'https://media.example/video.mp4' })]) {
+      let calls = 0;
+      const client = new LuluLabClient({ apiKey: 'fake-key', fetchImpl: async () => ++calls === 1
+        ? response({ presignedUrl: 'https://asset.example/upload', mimeType: 'video/mp4' }) : result() });
+      await assert.rejects(() => client.upload(file), /上传|媒体|mimeType/);
+      assert.equal(calls, 2);
+    }
+  } finally { await rm(root, { recursive: true }); }
+});
+
 test('image MIME follows bytes, while signed storage upload keeps its required Content-Type', async () => {
   const root = await mkdtemp(join(tmpdir(), 'lululab-mime-'));
   try {

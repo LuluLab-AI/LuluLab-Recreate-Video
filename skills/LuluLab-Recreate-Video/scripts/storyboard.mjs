@@ -230,7 +230,7 @@ export async function build({video, timestampsFile, outputDir, cellWidth = 240, 
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2), option = name => args[args.indexOf(name) + 1], ids = [];
+    const args = process.argv.slice(2), option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined, ids = [];
     for (let i = 0; i < args.length; i++) if (args[i] === '--segment-id') ids.push(Number(args[i + 1]));
     console.log(JSON.stringify(await build({video: option('--video'), timestampsFile: option('--timestamps-file'),
       outputDir: option('--output-dir'), cellWidth: Number(option('--cell-width') || 240),

@@ -93,36 +93,56 @@ export class LuluLabClient {
     const actualMimeType = imageMimeType(bytes);
     const destination = await this.request('/uploads', { method: 'POST' });
     const presigned = webUrl(destination.presignedUrl, '上传');
-    const location = webUrl(destination.location, '媒体');
     if (typeof destination.mimeType !== 'string' || !destination.mimeType.trim())
       throw new LuluLabError('上传响应缺少 mimeType。');
-    const send = method => this.fetch(presigned, { method, body: bytes,
-      headers: { 'Content-Type': destination.mimeType }, redirect: 'error',
-      signal: AbortSignal.timeout(this.timeoutMs) });
+    // Older signed-storage responses provide the final location up front.
+    if (destination.location) {
+      const location = webUrl(destination.location, '媒体');
+      const send = method => this.fetch(presigned, { method, body: bytes,
+        headers: { 'Content-Type': destination.mimeType }, redirect: 'error',
+        signal: AbortSignal.timeout(this.timeoutMs) });
+      let response;
+      try {
+        const method = String(destination.method || destination.httpMethod || 'PUT').toUpperCase();
+        if (!['PUT', 'POST'].includes(method)) throw new LuluLabError('上传响应含不支持的 HTTP 方法。');
+        response = await send(method);
+        if (method === 'PUT' && response.status === 405 &&
+            /(?:^|,|\s)POST(?:$|,|\s)/i.test(response.headers.get('allow') || '')) {
+          response = await send('POST');
+        }
+      } catch (error) {
+        if (error instanceof LuluLabError) throw error;
+        throw new LuluLabError('文件上传网络错误或超时。');
+      }
+      if (response.status === 415 && response.headers.get('allow') !== 'PUT') {
+        const form = new FormData();
+        form.append('file', new Blob([bytes], { type: destination.mimeType }), basename(file));
+        try {
+          response = await this.fetch(presigned, { method: 'POST', body: form,
+            redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs) });
+        } catch { throw new LuluLabError('文件上传网络错误或超时。'); }
+      }
+      if (!response.ok) throw new LuluLabError(`文件上传 HTTP ${response.status}（主机 ${presigned.hostname}；Allow ${response.headers.get('allow') || '未提供'}）。`);
+      // expiresAt describes the upload URL expiry, not the stored media lifetime.
+      return { url: location.href, mimeType: actualMimeType || destination.mimeType };
+    }
+    // The asset endpoint accepts a multipart POST and returns the final media location.
+    // The presigned URL is for uploading only and is never used as a media reference.
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type: actualMimeType || destination.mimeType }), basename(file));
     let response;
     try {
-      const method = String(destination.method || destination.httpMethod || 'PUT').toUpperCase();
-      if (!['PUT', 'POST'].includes(method)) throw new LuluLabError('上传响应含不支持的 HTTP 方法。');
-      response = await send(method);
-      if (method === 'PUT' && response.status === 405 &&
-          /(?:^|,|\s)POST(?:$|,|\s)/i.test(response.headers.get('allow') || '')) {
-        response = await send('POST');
-      }
-    } catch (error) {
-      if (error instanceof LuluLabError) throw error;
-      throw new LuluLabError('文件上传网络错误或超时。');
-    }
-    if (response.status === 415 && response.headers.get('allow') !== 'PUT') {
-      const form = new FormData();
-      form.append('file', new Blob([bytes], { type: destination.mimeType }), basename(file));
-      try {
-        response = await this.fetch(presigned, { method: 'POST', body: form,
-          redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs) });
-      } catch { throw new LuluLabError('文件上传网络错误或超时。'); }
-    }
-    if (!response.ok) throw new LuluLabError(`文件上传 HTTP ${response.status}（主机 ${presigned.hostname}；Allow ${response.headers.get('allow') || '未提供'}）。`);
-    // expiresAt describes the upload URL expiry, not the stored media lifetime.
-    return { url: location.href, mimeType: actualMimeType || destination.mimeType };
+      response = await this.fetch(presigned, { method: 'POST', body: form,
+        redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs) });
+    } catch { throw new LuluLabError('文件上传网络错误或超时。'); }
+    if (!response.ok) throw new LuluLabError(`文件上传 HTTP ${response.status}（主机 ${presigned.hostname}）。`);
+    let result;
+    try { result = await response.json(); }
+    catch { throw new LuluLabError('文件上传响应不是有效 JSON。'); }
+    const location = webUrl(result.location, '媒体');
+    if (typeof result.mimeType !== 'string' || !result.mimeType.trim())
+      throw new LuluLabError('文件上传响应缺少 mimeType。');
+    return { url: location.href, mimeType: actualMimeType || result.mimeType };
   }
 
   async submit(workflowId, input) {

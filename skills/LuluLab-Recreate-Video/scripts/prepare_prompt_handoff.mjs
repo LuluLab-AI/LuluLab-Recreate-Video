@@ -170,7 +170,7 @@ export async function prepare(manifestPath, outputDir = null) {
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2), option = name => args[args.indexOf(name) + 1];
+    const args = process.argv.slice(2), option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
     if (!option('--manifest')) throw Error('需要 --manifest');
     console.log(JSON.stringify(await prepare(option('--manifest'), option('--output-dir'))));
   } catch (error) {console.error(error.message); process.exitCode = 1;}

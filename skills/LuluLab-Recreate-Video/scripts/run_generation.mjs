@@ -290,7 +290,7 @@ export async function run({manifest, videoProvider = 'lululab_cli', skipConcat =
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2), option = name => args[args.indexOf(name) + 1],
+    const args = process.argv.slice(2), option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined,
       segments = [];
     for (let i = 0; i < args.length; i++) if (args[i] === '--segment-id') segments.push(Number(args[i + 1]));
     console.log(JSON.stringify(await run({manifest: option('--manifest'), videoProvider: option('--video-provider') || 'lululab_cli',

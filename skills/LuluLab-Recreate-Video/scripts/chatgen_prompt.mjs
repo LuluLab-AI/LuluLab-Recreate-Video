@@ -66,6 +66,8 @@ export function buildPrompt(manifest, segment, blueprint, context) {
       'Write each shot with local timestamps = global timestamps minus globalStart exactly once; include all overlapping shotIds/beatIds/utteranceIds and verified spoken dialogue.',
       'Preserve creator wardrobe across Segments; no burned-in captions, UI, promotions or watermarks.',
       'Do not invent health claims, prices, product benefits, characters or objects.',
+      'Showing multiple product units is only a visual arrangement. Never call them gifts, a free bundle, or a promotional offer unless the user explicitly provided those terms for the target product.',
+      'When a source character is replaced, describe the target creator from the registered creator reference; do not copy source-only facial or skin traits into the target identity.',
       'Keep output as a single, ready-to-send video prompt for the requested video model.'],
     segmentMetadata: segment, userConfig: config, productBrief: manifest.product?.brief,
     productReferencePolicy: manifest.product?.useBenchmarkProduct ?? true,
@@ -151,7 +153,7 @@ export async function invoke(manifestPath, segmentId, {resume = false, intervalM
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2), option = name => args[args.indexOf(name) + 1];
+    const args = process.argv.slice(2), option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
     const manifest = option('--manifest'), segmentId = Number(option('--segment-id'));
     if (!manifest || !Number.isInteger(segmentId) || segmentId < 1) throw Error('需要 --manifest 和 --segment-id');
     console.log(JSON.stringify(await invoke(manifest, segmentId, {resume: args.includes('--resume'),
