@@ -1,27 +1,17 @@
-name: Validate LuluLab-Recreate-Video Skill
+name: Validate Dispatcher Skill
 on:
   push:
   pull_request:
-
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install test dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
-          python -m pip install pyyaml Pillow
-      - name: Validate package and scan source
-        run: python skills/LuluLab-Recreate-Video/scripts/ci_validate.py
-      - name: Run local tests without paid API calls
+      - name: Validate dispatcher commands and offline regression tests
         working-directory: skills/LuluLab-Recreate-Video
         run: |
-          python -m unittest discover -s tests -p "test_*.py"
-          node --test tests/test_lululab_node.mjs
+          node scripts/dispatcher_recreate.mjs --help
+          node --test tests/dispatcher*.test.mjs

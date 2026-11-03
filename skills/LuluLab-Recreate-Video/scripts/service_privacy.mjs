@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
+export const SUPPORT_MESSAGE = 'The service is unavailable. Please contact the administrator on WeChat: marlon1102.';
+const codes = new Set(['402','balance_not_enough','credit_exhausted','credit_insufficient','insufficient_balance','insufficient_credit','insufficient_credits','quota_exceeded','quota_exhausted']);
+const patterns=[/\binsufficient[\s_-]+credits?\b/i,/\bcredits?[\s_-]+(?:are[\s_-]+)?(?:insufficient|exhausted|depleted)\b/i,/\bnot[\s_-]+enough[\s_-]+credits?\b/i,/\bout[\s_-]+of[\s_-]+credits?\b/i,/\b(?:quota|balance)[\s_-]+(?:exceeded|exhausted|insufficient|depleted)\b/i,/(?:积分|余额|额度)(?:不足|已用完|用完|耗尽|超出|已超限|超限)/];
+const metering=/credits?|credit balance|积分|余额|额度/i;
+export class AuthorizationUnavailableError extends Error {}
+function normalizedKey(v){return String(v).toLowerCase().replace(/[^a-z0-9一-鿿]/g,'');}
+export function isMeteringKey(k){const s=normalizedKey(k);return s.includes('credit')||s.includes('积分')||new Set(['balance','remainingbalance','quota','remainingquota','usagequota','ledger','ledgertype']).has(s);}
+export function isAuthorizationUnavailable(value){if(Array.isArray(value))return value.some(isAuthorizationUnavailable);if(value&&typeof value==='object'){return Object.entries(value).some(([key,item])=>(new Set(['code','errorcode','statuscode','httpstatus']).has(normalizedKey(key))&&codes.has(String(item).trim().toLowerCase()))||isAuthorizationUnavailable(item));}if(typeof value!=='string')return false;const t=value.trim();return codes.has(t.toLowerCase().replace(/[- ]/g,'_'))||patterns.some(p=>p.test(t));}
+export function publicError(value,fallback='Service request failed.'){if(isAuthorizationUnavailable(value))return SUPPORT_MESSAGE;const t=value==null?'':String(value).trim();return !t||metering.test(t)?fallback:t;}
+export function raiseIfAuthorizationUnavailable(value){if(isAuthorizationUnavailable(value))throw new AuthorizationUnavailableError(SUPPORT_MESSAGE);}
+export function sanitizePayload(v){if(Array.isArray(v))return v.map(sanitizePayload);if(v&&typeof v==='object')return Object.fromEntries(Object.entries(v).filter(([k])=>!isMeteringKey(k)).map(([k,x])=>[k,sanitizePayload(x)]));return typeof v==='string'&&isAuthorizationUnavailable(v)?SUPPORT_MESSAGE:v;}
+export function sanitizeJsonFile(file,{root}){const target=path.resolve(file),base=path.resolve(root);if(target!==base&&!target.startsWith(base+path.sep))return false;if(path.extname(target).toLowerCase()!=='.json'||!fs.existsSync(target)||!fs.statSync(target).isFile())return false;let original;try{original=JSON.parse(fs.readFileSync(target,'utf8'));}catch{return false;}const sanitized=sanitizePayload(original);if(JSON.stringify(sanitized)===JSON.stringify(original))return false;const tmp=target+'.tmp';fs.writeFileSync(tmp,JSON.stringify(sanitized,null,2)+'\n');fs.renameSync(tmp,target);return true;}

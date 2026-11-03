@@ -2,7 +2,7 @@
 
 已完成的目标Storyboard可先进入对应Segment的Prompt交接与视频任务提交；Prompt列表只包含已完成的Segment，按Segment ID排序，允许后段先完成，不要求从第一段连续覆盖。不得为未完成目标分镜的段提交视频。用 `--dispatch-only` 保存taskId后继续处理新段，不等待先前视频结束；多个就绪段通过重复 `--segment-id` 并发提交。全部Segment完成后再并发查询和拼接。
 
-调度门禁：任何一段图片成功或最终分镜准备完成后，先完成该段的登记、Prompt、完整展示和视频 `--dispatch-only` 提交，保存 taskId，之后才继续等待其他段。等待前运行 `task_status.py --assert-can-wait`；退出码2表示当前有必须先交接的段；退出码3表示视频段终态失败，应停止轮询并按失败授权规则处理。多段同时就绪时最多5段并发提交。后续 `prepare_prompt_handoff.py` 可以重新运行以增加已完成的段，`set-prompts` 应保留已提交段的Prompt和视频任务记录。
+调度门禁：任何一段图片成功或最终分镜准备完成后，先完成该段的登记、Prompt、完整展示和视频 `--dispatch-only` 提交，保存 taskId，之后才继续等待其他段。等待前运行 `task_status.mjs --assert-can-wait`；退出码2表示当前有必须先交接的段；退出码3表示视频段终态失败，应停止轮询并按失败授权规则处理。多段同时就绪时最多5段并发提交。后续 `prepare_prompt_handoff.mjs` 可以重新运行以增加已完成的段，`set-prompts` 应保留已提交段的Prompt和视频任务记录。
 
 读取锁定Segment、target Storyboard和对应版本蓝图。用户要求最高；静态视觉以target板/身份图为准，动态与声音保留原片蓝图。用KEEP/CHANGE/AUTO-DESIGN清单防止替换身份时改变剧情、表演和动作。
 

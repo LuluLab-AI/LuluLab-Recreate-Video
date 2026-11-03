@@ -1,58 +1,17 @@
-# LuluLab-Recreate-Video
+# LuluLab Video Recreation / 视频复刻
 
-## Overview
+Use an agent to enter the same settings and submit the same Customer/Dispatcher parent tasks as the website. / 在智能体里录入网站同款配置，提交相同的服务端父任务。
 
-This Skill recreates an **authorized** commerce video using a source video, product and creator references, a reviewed segment plan, storyboards and LuluLab generation. It is for creators and merchants with permission to use the source material. The Agent Skills root is this repository's `skills/LuluLab-Recreate-Video/` folder, containing `SKILL.md`.
+- Deep / 深度复刻（默认）：`DeepRecreationV1`, pipeline 2, presentation 1。
+- Storyboard / 分镜复刻：`StoryboardRecreationV1`, pipeline 2。
+- Element replacement / 元素替换：`ElementReplacementV1`。
 
-## Key Features
+默认 Fast、720p、9:16、生成声音；元素替换默认 Seedance 2.5。分镜和深度复刻支持 AI 新人物、指定人物、原片人物，未选且未上传人物图时默认 AI 新人物，与网站一致。服务端负责拆解、人物参考、视频生成与合成，客户端只上传、预估、提交、查询和下载。
 
-- Preprocesses and analyzes the source video through `RecreateVideoPromptV3`.
-- Builds segment storyboards, binds product and creator references, and displays complete prompts before each ready segment is submitted.
-- Uses `ImageGenV2` for image work and `VideoGenV2` with Seedance2 Mini for video generation. It saves task IDs to recover work without blind paid retries.
-- New tasks default to one realistic 2×2 creator identity sheet per selected main creator, generated through the bundled LuluLab CLI with GPT Image 2.5 Sunburst. Choose the source creator or supply creator photos instead. The same sheet guides storyboard edits and every relevant video segment.
-- Registers all user supplied product and creator photos independently of replacement choices and audits the final video references before submission.
-- Keeps interaction language separate from the target video's language; prompt instructions use Chinese for zh locales and English otherwise, while spoken lines retain the target language.
-- Hands off each ready segment immediately, saves its task ID, then joins completed segments. Rebuilds visible captions after joining when the source contains captions or promotional text.
+Requires Node.js 20+, local LuluLab credentials and FFprobe to measure source duration. Copy the complete skill folder into the agent skills directory. Set `LULULAB_API_KEY` locally or use the existing private configuration; never put keys in arguments, prompts or task state.
 
-## Requirements
+Run `node scripts/dispatcher_recreate.mjs --help`. Prepare input and run offline `plan`, query `estimate`, display the complete configuration and estimated credits, then submit once after explicit approval. Resume the original state with `poll` and `download`; never resubmit an uncertain or failed paid task automatically.
 
-A file-capable Agent Skills host such as Codex or Claude Code, or WorkBuddy with file-based Skills and command execution, Python 3.9+, FFmpeg/FFprobe, Node.js 20+, macOS, Windows or Linux, network access to LuluLab, and a LuluLab API Key for the first service call are required. Run `python3 scripts/host_preflight.py` to identify missing capabilities. The Node.js CLI is bundled at `scripts/lululab_cli.mjs`; there is no npm or `npx` install step.
+See [SKILL.md](SKILL.md) and [Dispatcher contract](references/DISPATCHER_RECREATION.md). Legacy scripts are only for existing local manifests or explicit prompt-only/old-pipeline requests; see [legacy recovery](references/LEGACY_LOCAL_RECREATION.md).
 
-## Installation
-
-Ask your agent:
-
-> Please install this LuluLab Skill into my current AI agent environment: https://github.com/LuluLab-AI/LuluLab-Recreate-Video . Follow the project's official installation instructions.
-
-The Agent should review the repository, then copy the **whole** `LuluLab-Recreate-Video/` folder into its current user Skill directory under the name `LuluLab-Recreate-Video`. Agent locations vary, so confirm the current location in that agent's documentation. Keep `SKILL.md`, `scripts/`, `references/`, `core/`, `utils/` and `assets/` together. Do not copy only `SKILL.md` or the repository's `skills/` wrapper. If the same Skill is already installed, compare versions and ask before replacement; leave other Skills alone. Run `python3 scripts/host_preflight.py`, `node scripts/lululab_cli.mjs --help` and `python3 scripts/video_cli_preflight.py --help` from the Skill root, reload the agent's Skill list, and verify discovery.
-
-## Quick Start
-
-- “Use $LuluLab-Recreate-Video to recreate this authorized 20-second product video with my new product photos. Show the plan before paid generation.”
-- “Recreate this authorized commerce video for an English-speaking US audience, but reply to me in Chinese.”
-
-The first confirmation covers source upload and the initial paid image/video generation; subsequent paid retries require a new decision. See [SKILL.md](SKILL.md).
-
-## Configuration
-
-The bundled CLI supports `upload <file>`, `user --credits`, `task submit --workflow-id <id> --input <JSON>` and `task fetch --id <id>`. Set `LULULAB_API_KEY` locally or use the existing private `~/.recreate-video-lululab/config.json` with an `apiKey` field. Do not put a Key in GitHub, a manifest, prompt or command argument. `LULULAB_NODE` may point to Node.js when it is absent from `PATH`; `LULULAB_CLI` may point only to another reviewed `.mjs` entry. See [the CLI contract](references/lululab_cli_contract.md).
-
-## Supported Languages
-
-English and Chinese interaction follow the Skill's existing language priority rules. A requested target video language is independent from the conversation language.
-
-## Troubleshooting
-
-| Symptom | Check |
-| --- | --- |
-| Skill is not recognized | Confirm the `LuluLab-Recreate-Video` root and its `SKILL.md`; reload discovery. |
-| CLI is missing | Check Node.js 20+, `scripts/lululab_cli.mjs`, and `--help`. |
-| API Key is missing | Configure `LULULAB_API_KEY` locally before the first service call. |
-| Network request fails | Check service access and resume the saved task ID before any resubmission. |
-| Model call fails | Inspect the terminal task status; do not switch models or repeat a paid task silently. |
-| Dependency is missing | Install the reported Python, FFmpeg or FFprobe dependency and rerun preflight. |
-
-## Support
-
-Website: https://lululab.ai  
-Email: contact@lululab.ai
+Interaction language follows the user; output language is independent. / 交互语言跟随用户，成品语言单独配置。

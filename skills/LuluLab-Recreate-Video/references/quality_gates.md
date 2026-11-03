@@ -12,8 +12,8 @@
 只有用户明确要求深度质检、复刻效果评估、镜头节奏对比或对齐图时，才运行Full模式：
 
 ```text
-python3 scripts/quality_review.py analyze ... --profile full
-# 本地视频生成链路也可：run_generation.py ... --full-quality-review
+node scripts/quality_review.mjs analyze ... --profile full
+# 本地视频生成链路也可：run_generation.mjs ... --full-quality-review
 ```
 
 Full模式保留原有低清视觉扫描、候选切镜统计与10组原片/复刻片对齐图。语义评分仍是用户明确要求时才执行的可选分析。所有报告均`deliveryBlocked=false`、`mayAutoRegenerate=false`。

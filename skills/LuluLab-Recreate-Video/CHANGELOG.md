@@ -1,3 +1,10 @@
+## 1.4.0 — Dispatcher parent tasks (2026-11-02)
+
+- New full-video tasks use the same parent IDs and input contracts as the frontend: StoryboardRecreationV1, DeepRecreationV1 (pipeline v2), ElementReplacementV1.
+- Added offline plan, Asset upload, billing quote + single submit, persistent parent polling and final-video download.
+- Preserved legacy manifest recovery and prompt-only export; no automatic migration or duplicate paid submission.
+- Match frontend replacement defaults: no person image means keep the source person.
+
 ## 1.3.7 — Segment 就绪即推进（2026-10-15）
 
 - 抽帧新增逐段就绪输出和单段选择；AI 身份板与抽帧可同时运行，先就绪段直接交接图片编辑。

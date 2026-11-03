@@ -8,6 +8,7 @@ venv/
 output/
 outputs/
 artifacts/
+node_modules/
 
 # Local credentials
 .env

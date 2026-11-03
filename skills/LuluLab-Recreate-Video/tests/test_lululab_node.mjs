@@ -105,8 +105,8 @@ test('credential precedence and URL transport restrictions', async () => {
   assert.throws(() => new LuluLabClient({ apiKey: 'x', baseUrl: 'https://user:secret@example.com' }));
 });
 
-// Exercise the actual Python -> Node subprocess bridge against a local mock API.
-test('Python adapter drives portable Node CLI end to end', async () => {
+// Exercise the packaged Node CLI against a local mock API.
+test('portable Node CLI completes upload, submit, fetch, and credits', async () => {
   const { createServer } = await import('node:http');
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
@@ -127,13 +127,17 @@ test('Python adapter drives portable Node CLI end to end', async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     const file = join(root, 'product.png'); await writeFile(file, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-    const scriptDir = fileURLToPath(new URL('../scripts/', import.meta.url));
-    const code = `import sys\nsys.path.insert(0,sys.argv[1])\nimport server_video_analysis as analysis\nimport local_video_cli as video\ncli=analysis.resolve_cli(None)\nanalysis.verify_key(cli,'fake-key')\nmedia=video.run_lululab_cli(['upload',sys.argv[2]])\nresult=video.run_lululab_cli(['task','submit','--workflow-id','VideoGenV2','--input','{"referenceImages":[]}'])\nassert video.run_lululab_cli(['task','fetch','--id',result['id']])['status']=='Succeeded'\nprint(result['id'])\n`;
+    const cli = fileURLToPath(new URL('../scripts/lululab_cli.mjs', import.meta.url));
     const env = { ...process.env, LULULAB_API_KEY: 'fake-key', LULULAB_API_BASE_URL: `http://127.0.0.1:${server.address().port}`,
-      LULULAB_NODE: process.execPath, LULULAB_CLI: fileURLToPath(new URL('../scripts/lululab_cli.mjs', import.meta.url)),
-      PYTHONDONTWRITEBYTECODE: '1' };
-    const { stdout } = await promisify(execFile)('python3', ['-c', code, scriptDir, file], { env, timeout: 10000 });
-    assert.equal(stdout.trim(), 'task-bridge');
+      LULULAB_NODE: process.execPath, LULULAB_CLI: cli };
+    const invoke = async (...args) => JSON.parse((await promisify(execFile)(process.execPath,
+      [cli, ...args], {env, timeout: 10000})).stdout);
+    assert.deepEqual(await invoke('user', '--credits'), {balance: 30});
+    assert.equal((await invoke('upload', file)).url, `http://127.0.0.1:${server.address().port}/image.png`);
+    const submitted = await invoke('task', 'submit', '--workflow-id', 'VideoGenV2',
+      '--input', JSON.stringify({referenceImages: []}));
+    assert.equal(submitted.id, 'task-bridge');
+    assert.equal((await invoke('task', 'fetch', '--id', submitted.id)).status, 'Succeeded');
     const task = requests.find(item => item.path === '/tasks');
     assert.equal(task.auth, 'fake-key');
     const payload = JSON.parse(task.body);

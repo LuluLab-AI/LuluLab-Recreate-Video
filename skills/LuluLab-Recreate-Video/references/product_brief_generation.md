@@ -9,28 +9,25 @@
 - 多图明显不是同一产品时才询问用户选择；同一产品不同角度直接合并。
 
 ```text
-python3 scripts/validate_product_images.py --image <product-1> [--image <product-2> ...]
+node scripts/validate_product_images.mjs --image <product-1> [--image <product-2> ...]
 ```
 
-## 2. 只提取必要信息
+## 2. ChatGenV2 自动识别产品图
 
-默认只读取一次产品图并提取：
+完成产品图注册后运行：
 
-- `产品名称`：能确认品牌/型号则写；否则保守品类名。
-- `产品类型`：能可靠确认的品类。
-- `使用方式`：只有原视频动作需要判断物理适配时才写；不清楚就留空。
-- `锁定特征`：3～6条真正决定身份的外观/结构特征，例如品牌标识、主轮廓、关键接口、独特配色或一体式结构。
-- `用户卖点锁定`：仅保留用户明确提供的卖点原文。
-- `其他要求`：产品专属要求；没有写“无”。
+```text
+node scripts/product_image_analysis.mjs --manifest <manifest>
+```
 
-不要重复生成外观、颜色、材质、Logo、结构、AI补充卖点等长字段。视频/图片模型直接看产品参考图，文字只补充“图像不容易稳定表达但必须锁定”的事实。
+该脚本复用 `ChatGenV2`（input.prompt + images），一次识别同一产品的全部参考图，输出轻量产品卡：产品名称、类型、使用方式、锁定特征。模型**不得生成用户卖点**，用户卖点从 `manifest.product.userSellingPoints` 原文注入。它会将 `manifest.product.brief` 写入 Manifest；其他阶段直接复用。已提交任务恢复使用 `--resume`，不可重复提交。
 
-禁止无依据推断功能、参数、功效、认证、价格、容量或承诺。
+除无图片的保留原商品模式外，禁止退回宿主 Agent 直接识图。检测多商品时请求用户澄清。
 
 ## 3. 构建 Fast Brief
 
 ```text
-python3 scripts/build_product_brief.py --fast-brief --product-name "<名称或保守品类>" --product-type "<品类>" [--usage "<必要使用方式>"] [--locked-feature "<身份特征>" ...] [--user-selling-point "<用户卖点>" ...] --other-requirements "<要求或无>" --compact
+node scripts/build_product_brief.mjs --fast-brief --product-name "<名称或保守品类>" --product-type "<品类>" [--usage "<必要使用方式>"] [--locked-feature "<身份特征>" ...] [--user-selling-point "<用户卖点>" ...] --other-requirements "<要求或无>" --compact
 ```
 
 输出：

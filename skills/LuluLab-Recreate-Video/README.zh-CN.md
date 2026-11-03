@@ -1,58 +1,17 @@
-# LuluLab-Recreate-Video（复刻爆款视频）
+# LuluLab Video Recreation / 视频复刻
 
-## 概述
+Use an agent to enter the same settings and submit the same Customer/Dispatcher parent tasks as the website. / 在智能体里录入网站同款配置，提交相同的服务端父任务。
 
-本 Skill 根据**已获授权**的带货原视频、产品和达人参考素材，生成经审核的分段方案、分镜和提示词，再通过 LuluLab 生成新视频。适合拥有原素材使用权的创作者和商家。Agent Skills 根目录是本仓库的 `skills/LuluLab-Recreate-Video/` 文件夹，其中包含 `SKILL.md`。
+- Deep / 深度复刻（默认）：`DeepRecreationV1`, pipeline 2, presentation 1。
+- Storyboard / 分镜复刻：`StoryboardRecreationV1`, pipeline 2。
+- Element replacement / 元素替换：`ElementReplacementV1`。
 
-## 主要能力
+默认 Fast、720p、9:16、生成声音；元素替换默认 Seedance 2.5。分镜和深度复刻支持 AI 新人物、指定人物、原片人物，未选且未上传人物图时默认 AI 新人物，与网站一致。服务端负责拆解、人物参考、视频生成与合成，客户端只上传、预估、提交、查询和下载。
 
-- 预处理原视频，通过 `RecreateVideoPromptV3` 拆解。
-- 制作分段分镜、绑定产品及达人参考，并在各段就绪时完整展示提示词。
-- 使用 `ImageGenV2` 制图和 `VideoGenV2` 的 Seedance2 Mini 生视频，保存任务 ID 以便恢复，避免盲目重复付费提交。
-- 新任务默认通过随包 LuluLab CLI 和 GPT Image 2.5 Sunburst，为选定的主要达人一次生成一张真实感 2×2 四视图身份板，供分镜编辑及各相关视频分段共用；也可选择沿用原人物或使用上传的达人图。
-- 用户上传的产品图和达人图独立于替换选择登记，视频提交前审计最终参考图，避免漏传。
-- 交互语言与目标视频语言分开：中文交互使用中文提示词说明，其他交互语言使用英文说明；口播保留目标视频语言。
-- 各段就绪即提交并保存任务 ID，全部完成后拼接；原片有字幕或营销贴字时，在拼接后重建可编辑文字层。
+Requires Node.js 20+, local LuluLab credentials and FFprobe to measure source duration. Copy the complete skill folder into the agent skills directory. Set `LULULAB_API_KEY` locally or use the existing private configuration; never put keys in arguments, prompts or task state.
 
-## 环境要求
+Run `node scripts/dispatcher_recreate.mjs --help`. Prepare input and run offline `plan`, query `estimate`, display the complete configuration and estimated credits, then submit once after explicit approval. Resume the original state with `poll` and `download`; never resubmit an uncertain or failed paid task automatically.
 
-需要能够读取文件型 Skill 并执行命令的智能体（如 Codex、Claude Code，或具备这些能力的 WorkBuddy 环境）、Python 3.9+、FFmpeg/FFprobe、Node.js 20+、macOS、Windows 或 Linux、LuluLab 网络连接，以及在首次服务端调用前配置 LuluLab API Key。运行 `python3 scripts/host_preflight.py` 可获知缺少的宿主能力。Node.js CLI 已包含在 `scripts/lululab_cli.mjs`，无需 npm 或 `npx` 安装。
+See [SKILL.md](SKILL.md) and [Dispatcher contract](references/DISPATCHER_RECREATION.md). Legacy scripts are only for existing local manifests or explicit prompt-only/old-pipeline requests; see [legacy recovery](references/LEGACY_LOCAL_RECREATION.md).
 
-## 安装
-
-可向智能体发送：
-
-> 请将这个 LuluLab Skill 安装到我当前使用的 AI 智能体环境：https://github.com/LuluLab-AI/LuluLab-Recreate-Video 。请遵循项目的官方安装说明。
-
-智能体先检查仓库，再把完整的 `LuluLab-Recreate-Video/` 文件夹复制到当前智能体的用户 Skill 目录，名称保持 `LuluLab-Recreate-Video`。各智能体目录不同，须按其当前文档确认。`SKILL.md`、`scripts/`、`references/`、`core/`、`utils/`、`assets/` 应在同一根目录；不能只复制 `SKILL.md`，也不能把仓库的 `skills/` 包装目录当作 Skill 根目录。已有同名 Skill 时先比较版本，替换前征求用户确认；不覆盖其他 Skill。在 Skill 根目录运行 `python3 scripts/host_preflight.py`、`node scripts/lululab_cli.mjs --help` 与 `python3 scripts/video_cli_preflight.py --help`，重新加载 Skill 列表并确认可识别。
-
-## 快速开始
-
-- “用 $LuluLab-Recreate-Video 按这条已授权的 20 秒产品视频和我的新产品照片制作新片，付费生成前先展示方案。”
-- “将这条已授权的带货视频改作面向美国市场的英文版本，但请用中文和我交流。”
-
-首次确认涵盖原片上传和首次付费图片、视频生成；后续付费重试需要重新决策。详见 [SKILL.md](SKILL.md)。
-
-## 配置
-
-随包 CLI 支持 `upload <文件>`、`user --credits`、`task submit --workflow-id <ID> --input <JSON>` 和 `task fetch --id <ID>`。在本机设置 `LULULAB_API_KEY`，或在已有私有文件 `~/.recreate-video-lululab/config.json` 中设置 `apiKey`。不要把 Key 写入 GitHub、manifest、提示词或命令参数。Node 不在 `PATH` 时可用 `LULULAB_NODE` 指定；`LULULAB_CLI` 只能覆盖为经过检查的 `.mjs` 入口。详见 [CLI 契约](references/lululab_cli_contract.md)。
-
-## 支持语言
-
-中英文交互遵循 Skill 现有的语言优先级。用户指定的目标视频语言与对话语言独立。
-
-## 常见问题
-
-| 问题 | 检查方法 |
-| --- | --- |
-| 无法识别 Skill | 确认 `LuluLab-Recreate-Video` 根目录及其中的 `SKILL.md`，重新加载列表。 |
-| 找不到 CLI | 检查 Node.js 20+、`scripts/lululab_cli.mjs` 和 `--help`。 |
-| 缺少 API Key | 首次服务端调用前在本机配置 `LULULAB_API_KEY`。 |
-| 网络请求失败 | 检查服务连接，重新提交前先恢复已保存的任务 ID。 |
-| 模型调用失败 | 查看终态任务状态，不静默切换模型或重复付费任务。 |
-| 缺少依赖 | 安装报告指出的 Python、FFmpeg 或 FFprobe 依赖，再运行预检。 |
-
-## 支持
-
-网站：https://lululab.ai  
-邮箱：contact@lululab.ai
+Interaction language follows the user; output language is independent. / 交互语言跟随用户，成品语言单独配置。

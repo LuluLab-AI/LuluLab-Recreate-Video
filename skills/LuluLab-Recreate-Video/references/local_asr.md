@@ -1,37 +1,35 @@
 # 本地口播识别
 
-`scripts/local_transcribe.py`把原视频音轨直接转成`audioReview`，输出分段和词级时间戳。音频只在本机读取；模型权重可以从模型仓库下载，但输入音频不得上传到任何转写服务。
+`scripts/local_transcribe.mjs`把原视频音轨直接转成`audioReview`，输出分段和词级时间戳。音频只在本机读取；模型权重可以从模型仓库下载，但输入音频不得上传到任何转写服务。
 
 ## 后端顺序
 
-`--backend auto`固定选择：
-
-1. Apple Silicon上的`mlx-whisper`；
-2. 已安装的`openai-whisper`。
+`--backend auto`使用本地 Node.js Whisper 推理。Apple Silicon 默认选择较大的 Turbo ONNX 模型；其他平台默认选择 Whisper Small ONNX 模型。
 
 检测：
 
 ```text
-python3 scripts/local_transcribe.py --detect
+node scripts/local_transcribe.mjs --detect
 ```
 
-Apple Silicon推荐运行方式：
+安装依赖后运行：
 
 ```text
-uv run --with mlx-whisper python scripts/local_transcribe.py \
+npm install
+node scripts/local_transcribe.mjs \
   --video <benchmark> \
   --output <task>/analysis/audio-review.json \
-  --backend mlx
+  --backend node
 ```
 
-如果目标语言已知，可传`--language en`、`--language zh`等Whisper语言代码。默认自动识别。默认MLX模型为`mlx-community/whisper-turbo`；只有用户对速度、磁盘或精度另有要求时才传`--model`。
+如果目标语言已知，可传`--language en`、`--language zh`等Whisper语言代码。默认自动识别。Apple Silicon 默认模型为`onnx-community/whisper-large-v3-turbo`；只有用户对速度、磁盘或精度另有要求时才传`--model`。
 
-首次`uv run`可能下载Python依赖，首次使用模型可能下载权重。发生下载前遵守当前环境的网络与文件权限要求。下载的是执行依赖和模型权重，不是上传用户音频。
+首次`npm install`会下载 Node.js 依赖，首次使用模型可能下载权重。下载的是执行依赖和模型权重，不会上传用户音频。
 
 若系统已经安装后端，也可直接运行：
 
 ```text
-python3 scripts/local_transcribe.py --video <benchmark> --output <task>/analysis/audio-review.json
+node scripts/local_transcribe.mjs --video <benchmark> --output <task>/analysis/audio-review.json
 ```
 
 ## 输出与登记
@@ -44,7 +42,7 @@ python3 scripts/local_transcribe.py --video <benchmark> --output <task>/analysis
     "status": "transcript_ready",
     "hasAudio": true,
     "speechDetected": true,
-    "reviewMethod": "local_mlx_whisper",
+    "reviewMethod": "local_node_whisper",
     "language": "en",
     "text": "...",
     "segments": [
@@ -64,7 +62,7 @@ python3 scripts/local_transcribe.py --video <benchmark> --output <task>/analysis
 音轨存在但Whisper未检测到可用语音时输出`verified_no_speech`；视频无音轨时输出`no_audio`。登记：
 
 ```text
-python3 scripts/generation_manifest.py set-audio-review --manifest <manifest> --file <task>/analysis/audio-review.json
+node scripts/generation_manifest.mjs set-audio-review --manifest <manifest> --file <task>/analysis/audio-review.json
 ```
 
 ## 质量边界

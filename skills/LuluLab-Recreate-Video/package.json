@@ -1,0 +1,8 @@
+{
+  "name": "lululab-recreate-video-skill",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.1"
+  }
+}

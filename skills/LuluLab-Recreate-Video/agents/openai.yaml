@@ -1,4 +1,4 @@
 interface:
   display_name: "LuluLab-Recreate-Video"
-  short_description: "Recreate commerce videos with stable multilingual replies"
-  default_prompt: "Use $LuluLab-Recreate-Video to recreate a video. Use the user's explicit reply language, then any clearly available host response-language setting, then the saved task language. Keep the target video language independent. Run host_preflight.py, register all user-uploaded images, and audit VideoGenV2 references before submission. Use gpt-image-2-5-sunburst for images and Seedance 2 Mini for video."
+  short_description: "Recreate videos through frontend-compatible Dispatcher tasks"
+  default_prompt: "Use $LuluLab-Recreate-Video to recreate a video with scripts/dispatcher_recreate.mjs. Default to deep mode, Fast/720p and the website AI person selection; preserve an explicit creatorMode, preserve explicit user choices, upload owned Asset files, plan offline, then submit one authorized Dispatcher parent task after displaying estimated credits and obtaining a billing quote. Save and poll the parent ID without resubmission. Use the legacy path only for existing manifests or explicit prompt-only exports."

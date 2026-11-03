@@ -7,7 +7,7 @@ The data source is the registered segments in analysis/local-video-prompts.json.
 After registering prompts, export each exact prompt with:
 
 ```text
-python3 scripts/export_prompt_texts.py --manifest <manifest> --output-dir <task>/prompts
+node scripts/export_prompt_texts.mjs --manifest <manifest> --output-dir <task>/prompts
 ```
 
 Use the returned absolute paths for backup links. Keep all prompts complete and unchanged in the files, including target-language dialogue and identifiers. Exports do not add an approval gate.

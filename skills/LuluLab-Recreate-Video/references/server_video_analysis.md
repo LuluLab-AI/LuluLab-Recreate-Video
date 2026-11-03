@@ -1,6 +1,6 @@
 # V7：先分析原视频，兼容V6旧任务
 
-RecreateVideoPromptV3仅通过LuluLab task submit/fetch调用，现有主模型/兜底保持不变。本文件只规范拆解用途；LuluLab 图片工作流的按需配置及视频生成限制由`SKILL.md`、`storyboard_editing.md`和`generation_rules.md`规范，不会改变RecreateVideoPromptV3的输入与输出契约。V5.1新任务输入携带`plannerVersion=2`；旧任务携带`plannerVersion=1`、benchmarkVideo媒体对象及userConfig：model、newVideoDuration、targetCountry、targetLanguage、otherRequirements、targetDuration、blueprintSchemaVersion=7.0（旧任务6.0）、technicalCutCandidates，以及仅供Code节点使用的sourceDuration、targetDurationSource。不传rawStoryboards或替换参考图；sourceDuration/targetDurationSource不注入Gemini Prompt。
+StoryboardPlan仅通过LuluLab task submit/fetch调用，现有主模型/兜底保持不变。本文件只规范拆解用途；LuluLab 图片工作流的按需配置及视频生成限制由`SKILL.md`、`storyboard_editing.md`和`generation_rules.md`规范，不会改变StoryboardPlan的输入与输出契约。V5.1新任务输入携带`plannerVersion=2`；旧任务携带`plannerVersion=1`、benchmarkVideo媒体对象及userConfig：model、newVideoDuration、targetCountry、targetLanguage、otherRequirements、targetDuration、blueprintSchemaVersion=7.0（旧任务6.0）、technicalCutCandidates，以及仅供Code节点使用的sourceDuration、targetDurationSource。不传rawStoryboards或替换参考图；sourceDuration/targetDurationSource不注入Gemini Prompt。
 
 默认由客户端读取真实原始时长，按`durationMode=custom`裁剪原片前N秒，然后按需压缩、校验并上传；`source`保留全片，不受生成时长取整影响。`sourceDuration`保留原始真实时长，`targetDuration`保持现有复刻目标语义，实际分析时长仅记录为本地`analysisDuration`；过滤区间外候选切点。上传限制仍为20,000,000字节。
 
@@ -37,6 +37,6 @@ V2人物使用characterId，声源使用speakerId及可空characterId；每个�
 
 随包 `scripts/lululab_cli.mjs` 支持 `upload <file>`、`task submit --workflow-id --input`、`task fetch --id`、`user --credits`。由 Node.js 20+ 执行；Key 通过 `LULULAB_API_KEY` 环境变量传入，不写入命令行或日志。上传响应提供媒体 `url` 和 `mimeType`；签名上传 URL 的失效时间不作为媒体失效时间。
 
-附件文档的拆解样例使用 `RecreateVideoPromptV2`，键名为 `benchmarkVideoUrl`，包含 `productBrief`、`creatorBrief`。本Skill的V3还依赖 `videoBlueprint`、`replicationPlan` 与 Planner 2 输出；不能只改工作流ID就替换为V2。客户端保留 `RecreateVideoPromptV3` 及原输入契约，直接交由 CLI 自动触发工作流，读取返回的拆解和规划结果；不要求用户部署工作流。
+附件文档的拆解样例使用 `RecreateVideoPromptV2`，键名为 `benchmarkVideoUrl`，包含 `productBrief`、`creatorBrief`。本Skill的V3还依赖 `videoBlueprint`、`replicationPlan` 与 Planner 2 输出；不能只改工作流ID就替换为V2。客户端保留 `StoryboardPlan` 及原输入契约，直接交由 CLI 自动触发工作流，读取返回的拆解和规划结果；不要求用户部署工作流。
 
 Key仅保存在本机私有配置。用户确认LuluLab与原服务契约一致，图片与视频分别沿用原CLI中的ImageGenV2与VideoGenV2，见lululab_cli_contract.md。

@@ -1,13 +1,13 @@
 # LuluLab CLI 视频生成
 
-每段目标分镜和Prompt通过校验后立即单独提交：`run_generation.py --manifest <manifest> --video-provider lululab_cli --segment-id <ID> --skip-concat --dispatch-only --generation-approved`。此命令保存taskId后返回，不等待视频生成；其他段的分镜和视频提交可继续进行。若多个段已就绪，可重复 `--segment-id` 并用 `--max-concurrency 5` 一次并发提交。提交命令必须显式指定Segment、`--skip-concat`和`--dispatch-only`。已成功或已有taskId的段只复用/恢复，不重提；全部段提交后运行查询、下载和拼接命令，该命令只处理已有taskId的段。
+每段目标分镜和Prompt通过校验后立即单独提交：`run_generation.mjs --manifest <manifest> --video-provider lululab_cli --segment-id <ID> --skip-concat --dispatch-only --generation-approved`。此命令保存taskId后返回，不等待视频生成；其他段的分镜和视频提交可继续进行。若多个段已就绪，可重复 `--segment-id` 并用 `--max-concurrency 5` 一次并发提交。提交命令必须显式指定Segment、`--skip-concat`和`--dispatch-only`。已成功或已有taskId的段只复用/恢复，不重提；全部段提交后运行查询、下载和拼接命令，该命令只处理已有taskId的段。
 
-固定provider为 `lululab_cli`，模型默认 `seedance-2-mini`（Seedance2 Mini），720p、每段4–15秒，不切换其他平台。
+固定provider为 `lululab_cli`，模型默认 `seedance-2-mini`（Seedance2 Mini）。新增模型 MiniMax H3、Wan 3、Omini 的提交枚举值分别为 `minimax-h3`、`wan-3`、`google-omni`；每段时长与分辨率按 `references/model_capabilities.md` 校验。不切换其他平台。
 
 ```text
-python3 scripts/video_cli_preflight.py --manifest <manifest>
-python3 scripts/run_generation.py --manifest <manifest> --video-provider lululab_cli --segment-id <ID> --skip-concat --dispatch-only --generation-approved
-python3 scripts/run_generation.py --manifest <manifest> --video-provider lululab_cli --max-concurrency 5
+node scripts/video_cli_preflight.mjs --manifest <manifest>
+node scripts/run_generation.mjs --manifest <manifest> --video-provider lululab_cli --segment-id <ID> --skip-concat --dispatch-only --generation-approved
+node scripts/run_generation.mjs --manifest <manifest> --video-provider lululab_cli --max-concurrency 5
 ```
 
 CLI通过 `task submit --workflow-id VideoGenV2 --input <JSON>` 自动触发既有视频工作流。沿用底稿输入：`model`、`prompt`、整数 `duration`、`aspectRatio`、`resolution`、`referenceImages`。图片工作流为 `ImageGenV2`，模型为 `gpt-image-2-5-sunburst`，图片输入不含duration。
