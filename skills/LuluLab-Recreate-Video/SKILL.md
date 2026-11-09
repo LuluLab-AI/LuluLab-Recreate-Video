@@ -1,18 +1,23 @@
 ---
 name: LuluLab-Recreate-Video
+slug: lululab-recreate-video
+version: 1.5.2
+displayName: LuluLab-Recreate-Video
+summary: Recreate commerce videos through LuluLab Dispatcher tasks.
+homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 description: Recreate authorized commerce videos through the same LuluLab Dispatcher parent tasks as the frontend, including storyboard, deep recreation, and element replacement.
 license: Apache-2.0
 metadata:
   skillhub:
-    slug: LuluLab-Recreate-Video
-    version: 1.5.1
+    slug: lululab-recreate-video
+    version: 1.5.2
     displayName: LuluLab-Recreate-Video
     summary: Submit and resume frontend-compatible video recreation tasks.
     tags: [视频复刻, 爆款视频, 电商广告, AI视频]
     homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# LuluLab-Recreate-Video v1.5.1
+# LuluLab-Recreate-Video v1.5.2
 
 ## Default execution: Dispatcher parent task
 
@@ -39,7 +44,7 @@ Translate confirmation examples into the interaction language, including “Esti
 
 Keep generated prompts verbatim for submission. If useful, provide a separately labeled explanation or translation in the interaction language without replacing the original prompt. Preserve the user's original creative requirements. These rules also apply to legacy and prompt-only paths; older references that force Chinese for zh locales and English for all other locales must not override them.
 
-Collect the source video and requested changes; accept optional product, person, background and voice references. Source duration must be measured, 4–60 seconds. Use FFprobe for local video rather than guessing. Require Node.js >=20 and LuluLab credentials (`LULULAB_API_KEY` or existing private `~/.recreate-video-lululab/config.json`). Do not print/store API keys or pass them in command arguments.
+Collect the source video and requested changes; accept optional product, person, background and voice references. Source duration must be measured, 4–60 seconds. Use FFprobe for local video rather than guessing. Require Node.js >=20 and LuluLab credentials (`LULULAB_API_KEY` or existing private `~/.recreate-video-lululab/config.json`). If the key is missing or invalid, guide the user in the interaction language to https://www.lululab.ai/workshop/keys to obtain an API Key and configure `LULULAB_API_KEY` securely on their device. Do not ask the user to paste a key in chat, and do not repeat the guidance when a valid key is already configured. Do not print/store API keys or pass them in command arguments.
 
 Read [the Dispatcher contract and request example](references/DISPATCHER_RECREATION.md) before preparing input. `plan` is offline. The server remains authoritative for model availability, billing, Asset ownership and actual source duration.
 
@@ -59,6 +64,10 @@ Example (replace placeholders with real values, using the user's interaction lan
 Ask explicitly whether to start with that displayed configuration and wait for the user's reply before creating any analysis, planning, image or video task. A generic request to recreate a video, invoking this skill, supplying references, silence, or the agent announcing defaults is not configuration approval. Show the final configuration even when the initial request contains parameters. Only explicit confirmation of that displayed configuration permits `submit --generation-approved`; the flag cannot obtain consent itself. Local inspection, preparing files and offline `plan` validation may proceed before confirmation.
 
 Reuse confirmation for the unchanged configuration and its normal parent orchestration, including configured server retries. Changes to configuration, new billing scope or paid client retries require a revised configuration and fresh explicit confirmation. Existing-task polling and downloads need no new confirmation. Apply this rule to legacy and prompt-only submissions as well.
+
+## Complete credit admission
+
+One full-video parent reserves its complete quoted scope before its segments run. For legacy or explicitly selected local generation, wait until every unsubmitted segment in the approved scope has its final prompt and references, then use one `/tasks/batch` request. Quote and sum all segments, check available credits after holds, and let the server freeze the entire batch atomically. Never submit ready segments individually or silently reduce the scope when credits are insufficient. Preserve saved task IDs and batch quote IDs when recovering. See `scripts/credit_batch.mjs` and the legacy generation rules for the executable path.
 
 ## Execution and recovery
 

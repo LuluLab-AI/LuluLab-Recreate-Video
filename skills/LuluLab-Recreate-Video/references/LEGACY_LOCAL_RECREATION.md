@@ -43,13 +43,11 @@ The target video language is independent and keeps its existing user-selected/so
 
 ## Task completion and recovery
 
-### 逐段交接硬门禁
+### 整批积分准入
 
-最多5段图片任务并发运行。任一段的图片任务成功后，立即对该段执行 `fast-prepare`、登记 edited Storyboard、`prepare_prompt_handoff.mjs`、通过 `chatgen_prompt.mjs --manifest <manifest> --segment-id <ID>` 调用 LuluLab CLI `ChatGenV2` 并登记 Prompt、导出并完整展示 Prompt。本地完整复刻模式下，沿用一次启动确认中已授予的首次视频生成授权，紧接着运行视频预检与 `run_generation.mjs --segment-id <ID> --skip-concat --dispatch-only --generation-approved`。取得视频 taskId 后再等待其他图片或视频任务。后段图片先完成时也立即交接，不等前段；Prompt列表按Segment ID排序，允许暂时缺少尚未完成的段。若多段同时完成，按 Segment 顺序准备 Prompt，随后用重复的 `--segment-id` 和 `--max-concurrency 5` 并发提交所有就绪段。后续段登记和 Prompt 更新必须保留已提交段的 taskId。
+各段图片完成后可以登记分镜并准备、展示 Prompt，但不得立即提交该段视频。等本轮批准范围内所有未提交分段的最终分镜和 Prompt 准备齐全后，用一次 `run_generation.mjs --manifest <manifest> --segment-id <ID1> --segment-id <ID2> --skip-concat --dispatch-only --generation-approved` 提交全部待生成段（重复 `--segment-id` 列出全部）。脚本先取得全部报价、合计可用积分，再通过 `/tasks/batch` 一次冻结；不足时整批不提交，不得只生成积分够用的部分。
 
-每次准备等待或查询远端任务前，先运行 `node scripts/task_status.mjs --manifest <manifest> --assert-can-wait`。若退出码为2，按输出的 `readySegmentActions` 完成单段交接，不能先继续等待；若退出码为3，已有视频段终态失败，停止轮询并按失败授权规则处理。这个检查只读取本地状态，不提交任务；已提交段不会再次提交。某段明确失败或缺少必需输入时按原错误规则停在该段，不重新付费提交。
-
-A pending server state such as Created or Running is progress, not a workflow failure. For analysis and image tasks, retain the returned process/session ID and keep waiting on that execution while sending concise progress updates. For video `--dispatch-only`, save each taskId and continue preparing/submitting other ready segments; then poll all saved IDs concurrently. Do not end the task with a final pending-status message while a live polling process remains active. Continue through successful analysis, storyboard preparation, authorized generation, and delivery; stop only on a real error/timeout, required user input, or an explicit user interruption. Preserve task IDs and never resubmit to overcome waiting.
+等待前运行 `task_status.mjs --assert-can-wait`。状态检查只读取本地数据；尚未齐备的 Prompt 可以继续准备。只有所有未提交段都具备 Prompt 时才返回 `dispatch_video_batch`。已有任务 ID 的旧段只查询和恢复，不重提；本次整批的 ID 全部保存后，再查询和拼接。未知响应或失败必须保留原状态核查，不能自动创建另一批。
 
 On every resumed turn, or after a polling process was interrupted, run `node scripts/task_status.mjs --manifest <manifest>` first. If it reports `video_ready`, immediately give the user the existing final video and its saved technical status. Do not fetch, re-download, re-render, or resubmit in that case. If it reports `segments_ready`, finish local assembly; for a pending task, resume only its saved task ID. For a local source, reuse completed Gemini analysis when `analysis.cacheValid` is true; false means the source changed. Null means old or remote provenance needs manual comparison with the saved task input before reuse. Never rely on the last chat message or a past `Created`/`Running` snapshot to describe current state.
 
@@ -86,7 +84,7 @@ node scripts/lululab_key_preflight.mjs
 
 预检会从`LULULAB_API_KEY`或`~/.recreate-video-lululab/config.json`的`apiKey`读取非空 Key，并调用LuluLab`user --credits`完成真实服务端鉴权。只有命令返回`{"ok": true, "authenticated": true}`才算通过；“本地存在非空 Key”、CLI 可启动或未经证实的网络错误都不算通过。
 
-- 未配置 Key 时，只在这个按需检查节点提醒用户：“接下来需要调用LuluLab拆解原视频，请前往 https://customer.lululab.ai/ 获取 API Key。”不得把这条提醒提前到任务开始、素材检查或启动确认阶段。
+- 未配置 Key 时，只在这个按需检查节点提醒用户：“接下来需要调用LuluLab拆解原视频，请前往 https://www.lululab.ai/workshop/keys 获取 API Key，并在本机安全配置；不要在聊天中粘贴 Key。”不得把这条提醒提前到任务开始、素材检查或启动确认阶段。
 - 远端预检因 Key 无效、权限不足、网络失败、CLI 不可用等原因未通过时，停止即将进行的LuluLab拆解，保留已经完成的本地分析和manifest；只展示脱敏原因，请用户检查或更换 Key 后重试。
 - 预检通过前不得上传原视频或提交LuluLab任务。每个新任务在首次LuluLab调用前都必须完成一次预检，不得因为之前任务曾通过而跳过；预检之前的本地读取、确认、初始化与技术分析不受此门禁限制。
 - 如果用户提供 Key，只将其用于本地配置和鉴权；不在后续聊天、命令输出、日志、manifest或交付物中回显完整 Key。

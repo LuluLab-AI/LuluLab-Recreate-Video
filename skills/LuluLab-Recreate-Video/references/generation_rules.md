@@ -1,16 +1,17 @@
 # LuluLab CLI 视频生成
 
-每段目标分镜和Prompt通过校验后立即单独提交：`run_generation.mjs --manifest <manifest> --video-provider lululab_cli --segment-id <ID> --skip-concat --dispatch-only --generation-approved`。此命令保存taskId后返回，不等待视频生成；其他段的分镜和视频提交可继续进行。若多个段已就绪，可重复 `--segment-id` 并用 `--max-concurrency 5` 一次并发提交。提交命令必须显式指定Segment、`--skip-concat`和`--dispatch-only`。已成功或已有taskId的段只复用/恢复，不重提；全部段提交后运行查询、下载和拼接命令，该命令只处理已有taskId的段。
+本轮未提交的所有目标分镜与 Prompt 齐备后，才运行一次整批提交。重复 `--segment-id` 列出全部未提交段，不允许只提交当前先完成的一段。脚本取得各段报价、合计核对可用积分，再通过 `/tasks/batch` 由服务端一次性冻结整批额度；不足时整批拦截。既有任务ID只复用/恢复，不重提；整批提交后再查询、下载和拼接。
+
 
 固定provider为 `lululab_cli`，模型默认 `seedance-2-mini`（Seedance2 Mini）。新增模型 MiniMax H3、Wan 3、Omini 的提交枚举值分别为 `minimax-h3`、`wan-3`、`google-omni`；每段时长与分辨率按 `references/model_capabilities.md` 校验。不切换其他平台。
 
 ```text
 node scripts/video_cli_preflight.mjs --manifest <manifest>
-node scripts/run_generation.mjs --manifest <manifest> --video-provider lululab_cli --segment-id <ID> --skip-concat --dispatch-only --generation-approved
+node scripts/run_generation.mjs --manifest <manifest> --video-provider lululab_cli --segment-id <ID1> --segment-id <ID2> --skip-concat --dispatch-only --generation-approved
 node scripts/run_generation.mjs --manifest <manifest> --video-provider lululab_cli --max-concurrency 5
 ```
 
-CLI通过 `task submit --workflow-id VideoGenV2 --input <JSON>` 自动触发既有视频工作流。沿用底稿输入：`model`、`prompt`、整数 `duration`、`aspectRatio`、`resolution`、`referenceImages`。图片工作流为 `ImageGenV2`，模型为 `gpt-image-2-5-sunburst`，图片输入不含duration。
+CLI通过 `task submit-batch --input <JSON数组>` 整批触发既有视频工作流，每项携带 `workflowId: VideoGenV2`。沿用底稿输入：`model`、`prompt`、整数 `duration`、`aspectRatio`、`resolution`、`referenceImages`。图片工作流为 `ImageGenV2`，模型为 `gpt-image-2-5-sunburst`，图片输入不含duration。
 
 参考图片按最终Storyboard、当前任务全部已登记用户产品图、全部用户达人图及本段目标AI达人身份板的顺序上传，转换为url/mimeType/expiredAt媒体对象，不把本地路径传给服务端。是否沿用原产品或人物不取消用户上传图；有语义冲突时阻断。新任务`ai_generated`单段和多段都必须携带已验证的2×2身份板，并与Storyboard编辑使用同一文件。旧Manifest继续沿用原单段无图、多段三视图策略。提交前审计去重后的实际请求引用，超过模型上限时使用既有合规合并方案，否则明确阻断。
 AI模式下还要检查最终Storyboard的`replacement.imageTaskReport`：其成功图片编辑报告必须包含当前身份图SHA256，证明同一图进入过整板编辑。报告丢失、图片改变或引用不一致时停止视频付费提交。

@@ -13,9 +13,10 @@ import {capability, validateGeneration} from './model_capabilities.mjs';
 import {render as renderReferenceBoard} from './reference_board.mjs';
 import {orderedSegments, render as concatRender} from './concat_videos.mjs';
 import {resolve as resolveTool, resolveOptional, buildReview} from './quality_review.mjs';
-import {client as defaultClient, uploadReferenceImages, submitVideo, pollTask,
+import {client as defaultClient, uploadReferenceImages, pollTask,
   media, downloadMedia, TaskFailedError} from './local_video_cli_lululab.mjs';
 import {publicError} from './service_privacy.mjs';
+import {quoteTaskBatch, validateBatchResponse} from './credit_batch.mjs';
 
 const expand = p => resolve(String(p).replace(/^~(?=\/|$)/, homedir()));
 const file = x => typeof x === 'string' ? x : x?.file || x?.filePath || '';
@@ -207,26 +208,43 @@ export async function run({manifest, videoProvider = 'lululab_cli', skipConcat =
         if (plan.referenceMedia.length !== plan.files.length)
           throw Error('最终 referenceImages 数量与审计通过的文件数量不一致。');
       }
-      for (const plan of fresh) await setVideo(path, Number(plan.segment.segmentId), 'submit_pending',
-        {candidateId, provider, model, inputFingerprint: plan.inputFingerprint});
-      const submissions = await runLimited(fresh, maxConcurrency, async plan => {
-        const id = await (dependencies.submitVideo || submitVideo)(model, plan.segment.prompt, Number(plan.segment.duration),
-          {referenceFiles: plan.files, referenceMedia: plan.referenceMedia,
-            aspectRatio: String(config.aspectRatio || '9:16'), resolution, api: c});
-        await setVideo(path, Number(plan.segment.segmentId), 'submitted', {candidateId, taskId: id,
-          provider, model, resolution, prompt: String(plan.segment.prompt), inputFingerprint: plan.inputFingerprint});
-        return {...plan, taskId: id};
-      });
-      const errors = [];
-      submissions.forEach((item, index) => {
-        if (item.ok) pending.push(item.value);
-        else errors.push({plan: fresh[index], error: item.error});
-      });
-      for (const {plan, error} of errors) await setVideo(path, Number(plan.segment.segmentId), 'submit_outcome_unknown',
-        {candidateId, provider, error: publicError(error.message, '提交结果未知。')});
-      if (errors.length) throw Error(errors.map(({plan, error}) =>
-        `Segment ${plan.segment.segmentId} submit失败：${publicError(error.message, '提交结果未知。')}`).join('；') +
-        '。其他已返回的任务ID已保存；再次运行只恢复这些ID。');
+      if (fresh.length) {
+        const scope = newCandidate ? selected : (data.benchmarkVideo?.analysis?.recommendedSegments?.length
+          ? data.benchmarkVideo.analysis.recommendedSegments : segments);
+        const missingScope = scope.filter(segment => {
+          const prior = selectedAttempt(existing.get(Number(segment.segmentId)), candidateId);
+          return !prior.taskId && prior.status !== 'success';
+        });
+        if (missingScope.some(segment => !fresh.some(plan => Number(plan.segment.segmentId) === Number(segment.segmentId))))
+          throw Error('同一视频的未提交分段必须全部准备就绪后一次性提交；请同时指定所有未提交分段，不能逐段占用积分。');
+        const forms = fresh.map(plan => ({ workflowId: (process.env.LULULAB_VIDEO_WORKFLOW_ID || 'VideoGenV2').trim(), input: {
+          model, prompt: plan.segment.prompt, duration: Number(plan.segment.duration),
+          aspectRatio: String(config.aspectRatio || '9:16'), resolution, referenceImages: plan.referenceMedia,
+        }}));
+        // Get every quote and check the complete available balance before checkpointing a paid POST.
+        const quoted = await quoteTaskBatch(c, forms);
+        for (const [index, plan] of fresh.entries()) await setVideo(path, Number(plan.segment.segmentId), 'submit_pending',
+          {candidateId, provider, model, inputFingerprint: plan.inputFingerprint, quoteId: quoted[index].quoteId});
+        let tasks;
+        try {
+          tasks = validateBatchResponse(await c.request('/tasks/batch', {method: 'POST', body: quoted}), fresh.length);
+        } catch (error) {
+          for (const plan of fresh) await setVideo(path, Number(plan.segment.segmentId), 'submit_outcome_unknown',
+            {candidateId, provider, error: publicError(error.message, '整批提交结果未知，请核对原任务。')});
+          throw error;
+        }
+        // Persist the complete response before updating individual segment records.
+        await update(path, current => {
+          current.videoGeneration.batchSubmission = {candidateId, quoteIds: quoted.map(form => form.quoteId),
+            taskIds: tasks.map(task => task.id), segmentIds: fresh.map(plan => Number(plan.segment.segmentId))};
+        });
+        for (const [index, plan] of fresh.entries()) {
+          const taskId = tasks[index].id;
+          await setVideo(path, Number(plan.segment.segmentId), 'submitted', {candidateId, taskId,
+            provider, model, resolution, prompt: String(plan.segment.prompt), inputFingerprint: plan.inputFingerprint});
+          pending.push({...plan, taskId});
+        }
+      }
       return {ok: true, status: 'dispatched', candidateId,
         segments: pending.map(plan => ({segmentId: Number(plan.segment.segmentId), taskId: plan.taskId})),
         reusedSegments: results.map(item => Number(item.segment.segmentId)), manifest: path};

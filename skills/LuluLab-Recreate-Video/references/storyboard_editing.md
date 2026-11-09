@@ -1,11 +1,11 @@
 # 单一Storyboard的清理与替换
 
-图片固定通过 LuluLab CLI 的 `ImageGenV2`，模型 `gpt-image-2-5-sunburst`、1K，使用 `scripts/lululab_image_generate.mjs`。不使用原生图片工具或切换其他通道。Planner V1/V2每段为3×3、9个anchors；抽帧图只是暂存，最终只保留一张rawStoryboard/edited Storyboard。
+图片固定通过 LuluLab CLI 的 `ImageGenV2`，模型 `gpt-image-2-5-sunburst`、1K，单图使用 `scripts/lululab_image_generate.mjs`，同一视频的多张分镜板使用 `scripts/image_batch_generate.mjs --config <batch.json>` 整批提交。不使用原生图片工具或切换其他通道。Planner V1/V2每段为3×3、9个anchors；抽帧图只是暂存，最终只保留一张rawStoryboard/edited Storyboard。
 
 ## 默认快速路径
 
 1. 依据蓝图visibleText识别原片口播字幕、商品说明、价格/促销贴字及无关UI；记录值得保留的文字区域、样式和时段供后期重建。整板编辑中去除原片烘焙文字，并将去字和产品/达人替换合并到一次LuluLab CLI图片编辑；不复制未核实价格。
-2. 只生成一次整板候选图；不做视觉质检，不因质量问题自动重做。多个 Segment 的整板候选图使用各自独立的 report、output 和锁文件；每段自身输入就绪后立即提交，最多5段并发查询；不可因某段正在等待就推迟其他段。已有 taskId 的段只恢复原任务，不重提。
+2. 只生成一次整板候选图；不做视觉质检，不因质量问题自动重做。多个 Segment 的整板候选图使用各自独立的 report、output；等本轮全部分镜板的输入准备齐全后，通过 image_batch_generate 整批报价并一次冻结，积分不足时全部停止。不得循环调用单图脚本逐张提交同一批分镜板。已有 taskId 的段只恢复原任务，不重提。
 3. 不建Replacement Map，不运行`validate-map`、`preview-mask`或`lock-merge`。
 4. 运行：
 ```text
@@ -39,3 +39,13 @@ AI模式的整板编辑必须通过 `lululab_image_generate.mjs --reference-imag
 ```
 
 快速路径仍只编辑一次、不新增视觉模型质检或自动重新生成。`replacementVerified` 仍只代表机械校验通过；不能声明完整人物替换已被视觉验证。
+
+## 多分镜板批次输入
+
+`batch.json` 包含 `state`（本批次唯一状态文件路径）和 `items` 数组。每项包含 `prompt` 或 `promptFile`、`aspectRatio`、`referenceImages`（本地路径数组）、`output` 和 `report`。例如两块板：
+
+```json
+{"state":"/work/image-batch.json","items":[{"promptFile":"/work/s1.txt","aspectRatio":"9:16","referenceImages":["/work/s1.png"],"output":"/work/s1-edited.png","report":"/work/s1-report.json"},{"promptFile":"/work/s2.txt","aspectRatio":"9:16","referenceImages":["/work/s2.png"],"output":"/work/s2-edited.png","report":"/work/s2-report.json"}]}
+```
+
+批次脚本保留原图片报告的 Prompt 和参考图 SHA256，视频参考审计继续读取这些报告。已有任务只恢复；提交响应未知时保留批次状态核查，不自动重提。

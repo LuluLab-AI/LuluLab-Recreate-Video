@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** LuluLab API v1 client. Node.js >=20; no external packages. */
 import { readFile } from 'node:fs/promises';
+import { quoteTaskBatch, validateBatchResponse } from './credit_batch.mjs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -24,6 +25,7 @@ export function imageMimeType(bytes) {
 export const HELP = `LuluLab Node.js CLI (Node >=20)
   node lululab_cli.mjs upload <file>
   node lululab_cli.mjs task submit --workflow-id <id> --input <JSON>
+  node lululab_cli.mjs task submit-batch --input <JSON-array>
   node lululab_cli.mjs task fetch --id <id>
   node lululab_cli.mjs user --credits
 Credentials: LULULAB_API_KEY (legacy LINGZHI_API_KEY / LZSTUDIO_API_KEY or
@@ -41,7 +43,7 @@ export async function resolveApiKey(env = process.env, home = homedir()) {
     if (error.code !== 'ENOENT') throw new LuluLabError('无法读取 LuluLab 本地凭证配置。');
   }
   if (typeof config?.apiKey === 'string' && config.apiKey.trim()) return config.apiKey.trim();
-  throw new LuluLabError('缺少 LuluLab API Key；请在本机配置 LULULAB_API_KEY。');
+  throw new LuluLabError('缺少 LuluLab API Key；请前往 https://www.lululab.ai/workshop/keys 获取，并在本机安全配置 LULULAB_API_KEY。不要在聊天中粘贴 Key。');
 }
 
 function webUrl(value, label) {
@@ -61,7 +63,7 @@ export class LuluLabClient {
     this.base = webUrl(baseUrl, 'API');
     if (this.base.search || this.base.hash || !['', '/'].includes(this.base.pathname))
       throw new LuluLabError('API 地址必须是服务根地址。');
-    if (!apiKey?.trim()) throw new LuluLabError('缺少 LuluLab API Key。');
+    if (!apiKey?.trim()) throw new LuluLabError('缺少 LuluLab API Key；请前往 https://www.lululab.ai/workshop/keys 获取，并在本机安全配置 LULULAB_API_KEY。不要在聊天中粘贴 Key。');
     this.key = apiKey.trim();
     this.fetch = fetchImpl;
     this.timeoutMs = timeoutMs;
@@ -77,12 +79,14 @@ export class LuluLabClient {
         redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch {
-      throw new LuluLabError(method === 'POST' && path === '/tasks'
+      throw new LuluLabError(method === 'POST' && ['/tasks', '/tasks/batch'].includes(path)
         ? 'LuluLab 提交响应未确认；任务可能已创建，禁止自动重提。'
         : 'LuluLab API 网络错误或超时。');
     }
     // Do not print server response text, which could contain private data.
-    if (!response.ok) throw new LuluLabError(`LuluLab API HTTP ${response.status}。${path === '/tasks' && method === 'POST' ? '禁止自动重提。' : ''}`);
+    if (!response.ok) throw new LuluLabError([401, 403].includes(response.status)
+      ? `LuluLab API HTTP ${response.status}；API Key 无效或无权限。请前往 https://www.lululab.ai/workshop/keys 检查或获取 Key，并在本机安全配置。`
+      : `LuluLab API HTTP ${response.status}。${['/tasks', '/tasks/batch'].includes(path) && method === 'POST' ? '禁止自动重提。' : ''}`);
     try { return await response.json(); }
     catch { throw new LuluLabError('LuluLab API 返回无效 JSON；提交任务时禁止自动重提。'); }
   }
@@ -154,6 +158,20 @@ export class LuluLabClient {
     return result;
   }
 
+  async submitBatch(forms) {
+    try {
+      const quoted = await quoteTaskBatch(this, forms);
+      const tasks = await this.request('/tasks/batch', { method: 'POST', body: quoted });
+      return validateBatchResponse(tasks, forms.length);
+    } catch (error) {
+      if (error instanceof LuluLabError) throw error;
+      const wrapped = new LuluLabError(error.message, error.code);
+      wrapped.code = error.code || 'LULULAB_SUBMISSION_UNCERTAIN';
+      wrapped.status = error.status;
+      throw wrapped;
+    }
+  }
+
   async task(id) {
     if (typeof id !== 'string' || !id.trim()) throw new LuluLabError('任务 ID 不能为空。');
     return this.request(`/tasks/${encodeURIComponent(id.trim())}`);
@@ -198,6 +216,11 @@ export async function main(args = process.argv.slice(2)) {
   // Validate commands before reading credentials or accessing the network.
   let action;
   if (args[0] === 'upload' && args.length === 2) action = client => client.upload(args[1]);
+  else if (args[0] === 'task' && args[1] === 'submit-batch') {
+    if (args.length !== 4 || args[2] !== '--input') throw new LuluLabError('用法：task submit-batch --input <JSON数组>');
+    const forms = JSON.parse(args[3]);
+    action = client => client.submitBatch(forms);
+  }
   else if (args[0] === 'user' && args.length === 2 && args[1] === '--credits') action = client => client.credits();
   else if (args[0] === 'task' && args[1] === 'fetch') {
     const id = option('--id'); action = client => client.task(id);

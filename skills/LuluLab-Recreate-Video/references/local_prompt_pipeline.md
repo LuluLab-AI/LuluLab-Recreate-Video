@@ -1,8 +1,9 @@
 # V7最终Prompt（兼容旧任务）
 
-已完成的目标Storyboard可先进入对应Segment的Prompt交接与视频任务提交；Prompt列表只包含已完成的Segment，按Segment ID排序，允许后段先完成，不要求从第一段连续覆盖。不得为未完成目标分镜的段提交视频。用 `--dispatch-only` 保存taskId后继续处理新段，不等待先前视频结束；多个就绪段通过重复 `--segment-id` 并发提交。全部Segment完成后再并发查询和拼接。
+各段目标 Storyboard 就绪后可以准备和展示对应 Prompt；保持按 Segment ID 排序。所有本轮未提交分段的分镜和 Prompt 都齐备后才进行视频提交。通过重复 `--segment-id` 列出全部待生成段，运行一次 `run_generation.mjs --skip-concat --dispatch-only --generation-approved`，由 `/tasks/batch` 整批校验和冻结。不得后段先提交、不得逐段占用积分。
 
-调度门禁：任何一段图片成功或最终分镜准备完成后，先完成该段的登记、Prompt、完整展示和视频 `--dispatch-only` 提交，保存 taskId，之后才继续等待其他段。等待前运行 `task_status.mjs --assert-can-wait`；退出码2表示当前有必须先交接的段；退出码3表示视频段终态失败，应停止轮询并按失败授权规则处理。多段同时就绪时最多5段并发提交。后续 `prepare_prompt_handoff.mjs` 可以重新运行以增加已完成的段，`set-prompts` 应保留已提交段的Prompt和视频任务记录。
+等待前运行 `task_status.mjs --assert-can-wait`；仅当所有未提交段都具备 Prompt 时才出现 `dispatch_video_batch`。退出码3仍表示视频终态失败，应按原恢复规则处理。已有任务ID只恢复，不重复提交。
+
 
 读取锁定Segment、target Storyboard和对应版本蓝图。用户要求最高；静态视觉以target板/身份图为准，动态与声音保留原片蓝图。用KEEP/CHANGE/AUTO-DESIGN清单防止替换身份时改变剧情、表演和动作。
 
