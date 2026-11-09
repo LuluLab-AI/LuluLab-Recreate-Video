@@ -1,8 +1,8 @@
 ---
 name: LuluLab-Recreate-Video
 slug: lululab-recreate-video
-version: 1.5.2
-displayName: LuluLab-Recreate-Video
+version: 1.5.3
+displayName: LuluLab 视频复刻
 summary: Recreate commerce videos through LuluLab Dispatcher tasks.
 homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 description: Recreate authorized commerce videos through the same LuluLab Dispatcher parent tasks as the frontend, including storyboard, deep recreation, and element replacement.
@@ -10,14 +10,14 @@ license: Apache-2.0
 metadata:
   skillhub:
     slug: lululab-recreate-video
-    version: 1.5.2
-    displayName: LuluLab-Recreate-Video
+    version: 1.5.3
+    displayName: LuluLab 视频复刻
     summary: Submit and resume frontend-compatible video recreation tasks.
     tags: [视频复刻, 爆款视频, 电商广告, AI视频]
     homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# LuluLab-Recreate-Video v1.5.2
+# LuluLab-Recreate-Video v1.5.3
 
 ## Default execution: Dispatcher parent task
 
