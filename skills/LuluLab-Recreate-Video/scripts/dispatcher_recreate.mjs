@@ -4,97 +4,12 @@ import { readFile, writeFile, mkdir, rename, rm, stat } from 'node:fs/promises';
 import { resolve, dirname, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
-import { LuluLabClient, resolveApiKey } from './lululab_cli.mjs';
+import { LuluLabClient, resolveApiKey, imageMimeType } from './lululab_cli.mjs';
+import { buildTask, guid, https, reference, validateReferenceImage } from './recreation_task.mjs';
 
-export const WORKFLOWS = { storyboard: 'StoryboardRecreationV1', deep: 'DeepRecreationV1', element_replace: 'ElementReplacementV1' };
-const models = { storyboard: ['seedance-2-mini', 'seedance-2-fast', 'seedance-2', 'seedance-2-5', 'wan-3'],
-  deep: ['seedance-2-fast', 'seedance-2', 'seedance-2-5', 'wan-3'], element_replace: ['seedance-2-5', 'wan-3'] };
-const guid = value => typeof value === 'string' && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(value);
+export { buildTask, WORKFLOWS } from './recreation_task.mjs';
+
 const sleep = ms => new Promise(done => setTimeout(done, ms));
-function https(value) {
-  const url = new URL(value);
-  if (url.protocol !== 'https:' || url.username || url.password) throw Error('Media must use HTTPS without embedded credentials.');
-  return url.href;
-}
-function reference(file, type) {
-  if (!file || typeof file !== 'object') throw Error('Media requires an uploaded file object.');
-  const mimeType = file.mimeType;
-  if (typeof mimeType !== 'string' || !mimeType.startsWith(`${type}/`)) throw Error(`Expected ${type} media MIME type.`);
-  const expiredAt = file.expiredAt || file.expiresAt;
-  if (expiredAt && (!Number.isFinite(Date.parse(expiredAt)) || Date.parse(expiredAt) <= Date.now())) throw Error('Media is expired.');
-  return { url: https(file.url || file.location), mimeType, ...(expiredAt ? { expiredAt } : {}) };
-}
-
-export function buildTask(config) {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) throw Error('Request must be a JSON object.');
-  if (config.promptOnly || config.executionMode === 'prompt-only') throw Error('Prompt-only requests must use the legacy export path, not a paid Dispatcher parent.');
-  const mode = config.mode ?? 'deep';
-  if (!Object.hasOwn(WORKFLOWS, mode)) throw Error('mode must be storyboard, deep or element_replace.');
-  const model = config.model ?? (mode === 'element_replace' ? 'seedance-2-5' : 'seedance-2-fast');
-  if (!models[mode].includes(model)) throw Error('The frontend does not support this model for the selected mode.');
-  const duration = config.sourceDuration;
-  if (!Number.isFinite(duration) || duration < 4 || duration > 60) throw Error('sourceDuration must be the measured source duration, 4–60 seconds.');
-  if (!guid(config.source?.id)) throw Error('source.id must be an owned uploaded Asset file ID, not a public URL or asset-record ID.');
-  const source = reference(config.source, 'video');
-  const images = name => {
-    const files = config[name] ?? [];
-    if (!Array.isArray(files)) throw Error(`${name} must be an array.`);
-    return files.map(file => reference(file, 'image'));
-  };
-  const productImages = images('productImages'), personImages = images('personImages'), backgroundImages = images('backgroundImages');
-  const creatorMode = config.creatorMode ?? (personImages.length ? 'user_provided' : 'ai_generated');
-  if (!['ai_generated', 'user_provided', 'keep_source'].includes(creatorMode)) throw Error('Invalid creatorMode.');
-  if (mode !== 'element_replace' && ((creatorMode === 'user_provided') !== Boolean(personImages.length))) throw Error('Only user_provided creator mode accepts and requires person images.');
-  const imageLimit = mode === 'element_replace' ? 10 : ((mode === 'deep' && creatorMode !== 'user_provided') || creatorMode === 'ai_generated' ? 6 : 7);
-  if (productImages.length + personImages.length + backgroundImages.length > imageLimit) throw Error(`At most ${imageLimit} reference images are supported for this mode.`);
-  if (config.referenceAudios !== undefined && !Array.isArray(config.referenceAudios)) throw Error('referenceAudios must be an array.');
-  const referenceAudios = (config.referenceAudios ?? []).map(file => reference(file, 'audio'));
-  if (referenceAudios.length > 1) throw Error('At most one voice reference is supported.');
-  if (config.generateAudio !== undefined && typeof config.generateAudio !== 'boolean') throw Error('generateAudio must be boolean.');
-  const generateAudio = config.generateAudio ?? true;
-  if (referenceAudios.length && !generateAudio) throw Error('Voice references require generateAudio=true.');
-  const aspectRatio = config.aspectRatio ?? '9:16', resolution = config.resolution ?? '720p';
-  const ratios = model === 'wan-3' ? ['9:16', '16:9', '1:1', '3:4', '4:3'] : ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
-  const resolutions = model === 'wan-3' ? ['720p'] : model === 'seedance-2-5' ? ['480p', '720p', '1080p'] : ['480p', '720p'];
-  if (!ratios.includes(aspectRatio) || !resolutions.includes(resolution)) throw Error('Unsupported model aspect ratio or resolution; use the frontend model settings.');
-  if (config.requirement !== undefined && typeof config.requirement !== 'string') throw Error('requirement must be text.');
-  const requirement = (config.requirement ?? '').trim();
-  if (config.marketingText !== undefined && typeof config.marketingText !== 'string') throw Error('marketingText must be text.');
-  const locale = config.interactionLocale ?? 'zh-CN';
-  if (typeof locale !== 'string' || !locale.trim()) throw Error('interactionLocale must be nonempty text.');
-  let input;
-  if (mode === 'storyboard') {
-    const shared = { interactionLocale: locale, targetCountry: config.targetCountry ?? '跟原视频一致',
-      targetLanguage: config.targetLanguage ?? '跟原视频一致', customRequirement: requirement };
-    input = { schemaVersion: 'lululab.recreate.video.v1', recreateMode: 'storyboard',
-      storyboardPipelineVersion: 2, reviewBeforeGeneration: false,
-      postproduction: { marketingText: (config.marketingText ?? requirement).trim(), marketingTextMode: config.marketingText === undefined ? 'creative_brief' : 'literal' },
-      benchmarkVideo: { ...source, assetId: config.source.id, duration },
-      userConfig: { model, sourceDuration: duration, targetDuration: Math.round(duration), targetDurationSource: 'source_nearest_integer', ...shared },
-      product: { mode: productImages.length ? 'replace' : 'keep_source', images: productImages },
-      creator: { mode: creatorMode, images: personImages },
-      assets: { backgroundMode: backgroundImages.length ? 'replace' : 'keep_source', backgroundImages, referenceAudios },
-      settings: { videoModel: model, durationMode: 'source', aspectRatio, resolution, generateAudio, ...shared } };
-  } else {
-    if (config.targetLanguage || config.targetCountry) throw Error('For deep/element_replace, include language/country instructions in requirement, as in the frontend.');
-    input = { model, intentVersion: 'lululab.recreation.intent.v1', userRequirement: requirement,
-      productImages, personImages, backgroundImages, aspectRatio: model === 'seedance-2-5' ? 'adaptive' : aspectRatio,
-      resolution, duration: Math.ceil(duration), generateAudio, sourceAssetId: config.source.id,
-      sourceDurationMs: Math.round(duration * 1000), modelDurationLimitMs: ['seedance-2-5', 'wan-3'].includes(model) ? 30000 : 15000,
-      ...([...productImages, ...personImages, ...backgroundImages].length ? { referenceImages: [...productImages, ...personImages, ...backgroundImages] } : {}),
-      ...(referenceAudios.length ? { referenceAudios } : {}) };
-    if (mode === 'deep') Object.assign(input, { deepPipelineVersion: 2, deepPresentationVersion: 1, creator: { mode: creatorMode }, recreateMode: 'deep', benchmarkVideo: source,
-      deepRequirement: requirement, sourceAspectRatio: aspectRatio });
-  }
-  const stored = (originals, normalized) => normalized.map((file, index) => ({ ...originals[index], ...file }));
-  const selected = { product: stored(config.productImages ?? [], productImages), person: stored(config.personImages ?? [], personImages),
-    background: stored(config.backgroundImages ?? [], backgroundImages), voice: stored(config.referenceAudios ?? [], referenceAudios) };
-  const editorSnapshot = { cloneMode: mode, brief: requirement, selected, referenceVideo: { ...config.source, ...source },
-    sourceVideoDuration: duration, model, aspectRatio, resolution, duration: Math.round(duration), generateAudio,
-    personSource: creatorMode === 'user_provided' ? 'upload' : creatorMode === 'keep_source' ? 'original' : 'generate',
-    personPhotos: selected.person, mentionBindings: [] };
-  return { workflowId: WORKFLOWS[mode], input, editorSnapshot };
-}
 
 export async function estimate(config, client) {
   const result = await client.request('/billing/estimates', { method: 'POST', body: { items: [buildTask(config)] } });
@@ -106,6 +21,10 @@ export class DispatcherClient extends LuluLabClient {
   async upload(file, mimeType) {
     const bytes = await readFile(file);
     if (!bytes.length || !/^(video|image|audio)\/[\w.+-]+$/.test(mimeType ?? '')) throw Error('Provide a nonempty file and its media MIME type.');
+    if (mimeType.startsWith('image/')) {
+      validateReferenceImage(mimeType, basename(file));
+      if (imageMimeType(bytes) !== mimeType) throw Error(`参考图「${basename(file)}」的实际格式与 MIME 类型不一致。请转换为 JPG、PNG 或 WebP 后重新上传。`);
+    }
     const destination = await this.request('/uploads', { method: 'POST' });
     if (!guid(destination.id)) throw Error('Upload ticket did not return an Asset ID.');
     const form = new FormData();
@@ -118,7 +37,7 @@ export class DispatcherClient extends LuluLabClient {
     const result = await response.json();
     if (result.id !== destination.id) throw Error('Uploaded Asset ID does not match its ticket.');
     const ref = reference(result, mimeType.split('/')[0]);
-    return { id: result.id, ...ref };
+    return { id: result.id, ...ref, ...(mimeType.startsWith('image/') ? { fileName: basename(file) } : {}) };
   }
   async quote(task) {
     const quote = await this.request('/billing/quotes', { method: 'POST', body: task });
@@ -151,7 +70,7 @@ function summary(state) {
     totalSegments: task.output?.totalSegments, video: task.output?.video, file: state.file,
     errorMessage: task.errorMessage };
 }
-export async function submit(config, file, client) {
+export async function submit(config, file, client, { maxCredits } = {}) {
   const task = buildTask(config);
   const signature = createHash('sha256').update(JSON.stringify(task)).digest('hex');
   return locked(file, async () => {
@@ -162,6 +81,9 @@ export async function submit(config, file, client) {
       throw Error('Previous submission may have created a task. Inspect task history; do not resubmit.');
     }
     const quote = await client.quote(task);
+    if (maxCredits !== undefined && (!Number.isSafeInteger(quote.credits) || quote.credits < 0 || quote.credits > maxCredits)) {
+      throw Error('Live quote is missing or exceeds the approved credits. Obtain an updated estimate before submitting.');
+    }
     state = { schema: 'lululab.dispatcher.recreate.v1', signature, workflowId: task.workflowId,
       request: task, quoteId: quote.id, quotedCredits: quote.credits, status: 'submission_unknown', taskId: null };
     // Persist BEFORE POST: timeouts, invalid responses and crashes must never create an automatic second task.
@@ -211,7 +133,7 @@ const HELP = `Dispatcher recreation (same parent tasks as the frontend):
   node scripts/dispatcher_recreate.mjs upload --file <path> --mime-type <video/mp4> --output <asset.json>
   node scripts/dispatcher_recreate.mjs plan --config <request.json> [--output <task.json>]
   node scripts/dispatcher_recreate.mjs estimate --config <request.json>
-  node scripts/dispatcher_recreate.mjs submit --config <request.json> --state <task-state.json> --generation-approved
+  node scripts/dispatcher_recreate.mjs submit --config <request.json> --state <task-state.json> --generation-approved [--max-credits <approved-total>]
   node scripts/dispatcher_recreate.mjs poll --state <task-state.json> [--max-polls 60] [--interval-ms 8000]
   node scripts/dispatcher_recreate.mjs download --state <task-state.json> --output <final.mp4>
 Credentials: LULULAB_API_KEY or existing private LuluLab config. Never pass keys in arguments.
@@ -221,7 +143,7 @@ export async function main(args = process.argv.slice(2)) {
   if (!args.length || args.includes('--help')) { process.stdout.write(HELP); return; }
   const command = args[0];
   const allowed = { upload: ['--file', '--mime-type', '--output'], plan: ['--config', '--output'], estimate: ['--config'],
-    submit: ['--config', '--state', '--generation-approved'], poll: ['--state', '--max-polls', '--interval-ms'], download: ['--state', '--output'] };
+    submit: ['--config', '--state', '--generation-approved', '--max-credits'], poll: ['--state', '--max-polls', '--interval-ms'], download: ['--state', '--output'] };
   if (!Object.hasOwn(allowed, command)) throw Error('Unknown command. Use --help.');
   const flags = {};
   for (let i = 1; i < args.length; i++) {
@@ -240,6 +162,8 @@ export async function main(args = process.argv.slice(2)) {
     process.stdout.write(JSON.stringify(task, null, 2) + '\n'); return;
   }
   if (command === 'submit' && !flags['--generation-approved']) throw Error('Paid generation requires existing user authorization and --generation-approved.');
+  const maxCredits = flags['--max-credits'] === undefined ? undefined : Number(flags['--max-credits']);
+  if (maxCredits !== undefined && (!Number.isSafeInteger(maxCredits) || maxCredits < 0)) throw Error('Invalid approved credit total.');
   const stateFile = ['submit', 'poll', 'download'].includes(command) ? file('--state') : null;
   const output = ['upload', 'download'].includes(command) ? file('--output') : null;
   const sourceFile = command === 'upload' ? file('--file') : null;
@@ -250,7 +174,7 @@ export async function main(args = process.argv.slice(2)) {
   let result;
   if (command === 'estimate') result = await estimate(config, client);
   else if (command === 'upload') { result = await client.upload(sourceFile, mimeType); await save(output, result); }
-  else if (command === 'submit') result = await submit(config, stateFile, client);
+  else if (command === 'submit') result = await submit(config, stateFile, client, { maxCredits });
   else if (command === 'poll') result = await poll(stateFile, client, { maxPolls, intervalMs, onProgress: progress => process.stderr.write(JSON.stringify(progress) + '\n') });
   else result = await download(stateFile, output, client);
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');

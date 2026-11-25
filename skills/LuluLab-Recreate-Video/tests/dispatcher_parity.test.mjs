@@ -11,9 +11,12 @@ const config = { source, sourceDuration: 12.4 };
 test('website defaults and explicit creator selection reach the server and history', () => {
   const task = buildTask(config);
   assert.equal(task.workflowId, 'DeepRecreationV1');
-  assert.equal(task.input.model, 'seedance-2-fast');
-  assert.equal(task.input.resolution, '720p');
+  assert.equal(task.input.model, 'seedance-2-5-flash');
+  assert.equal(task.input.resolution, '480p');
   assert.equal(task.input.deepPresentationVersion, 1);
+  assert.equal(task.input.outputAudioMode, 'source');
+  assert.equal(task.input.generateAudio, false);
+  assert.equal(task.editorSnapshot.audioModes.deep, 'source');
   assert.equal(task.input.creator.mode, 'ai_generated');
   for (const mode of ['storyboard', 'deep']) {
     for (const creatorMode of ['ai_generated', 'keep_source', 'user_provided']) {
@@ -31,19 +34,36 @@ test('website defaults and explicit creator selection reach the server and histo
 test('new storyboard pipeline and text modes match website orchestration', () => {
   const t = buildTask({ ...config, mode: 'storyboard', requirement: ' keep packaging ' });
   assert.equal(t.input.storyboardPipelineVersion, 2);
+  assert.equal(t.input.userConfig.targetDuration, 13);
+  assert.equal(t.input.settings.generateAudio, true);
   assert.equal(t.input.reviewBeforeGeneration, false);
   assert.deepEqual(t.input.postproduction, { marketingText: 'keep packaging', marketingTextMode: 'creative_brief' });
   assert.deepEqual(buildTask({ ...config, mode: 'storyboard', marketingText: '' }).input.postproduction,
     { marketingText: '', marketingTextMode: 'literal' });
 });
 test('mode-specific image limits and references match website', () => {
-  assert.throws(() => buildTask({ ...config, productImages: Array(7).fill(image) }));
-  assert.throws(() => buildTask({ ...config, mode: 'storyboard', productImages: Array(7).fill(image) }));
+  assert.equal(buildTask({ ...config, productImages: Array(10).fill(image) }).input.referenceImages.length, 10);
+  assert.throws(() => buildTask({ ...config, mode: 'storyboard', model: 'grok-imagine-1-5-preview', productImages: Array(7).fill(image) }));
   assert.equal(buildTask({ ...config, mode: 'storyboard', creatorMode: 'keep_source', productImages: Array(7).fill(image) }).input.product.images.length, 7);
   const t = buildTask({ ...config, mode: 'element_replace', productImages: Array(10).fill(image) });
   assert.equal(t.input.referenceImages.length, 10);
   assert.throws(() => buildTask({ ...config, mode: 'element_replace', productImages: Array(11).fill(image) }));
   assert.throws(() => buildTask({ ...config, model: 'wan-3', resolution: '1080p' }));
+});
+test('explicit and legacy audio settings match the execution input and editor history', () => {
+  const voice = { url: 'https://assets.example/voice.mp3', mimeType: 'audio/mpeg' };
+  const original = buildTask({ ...config, outputAudioMode: 'source', referenceAudios: [voice] });
+  assert.equal(original.input.outputAudioMode, 'source');
+  assert.equal(original.input.referenceAudios, undefined);
+  assert.deepEqual(original.editorSnapshot.selected.voice, [voice]);
+  const generated = buildTask({ ...config, generateAudio: true, referenceAudios: [voice] });
+  assert.equal(generated.input.outputAudioMode, 'generate');
+  assert.deepEqual(generated.input.referenceAudios, [voice]);
+  const muted = buildTask({ ...config, mode: 'storyboard', outputAudioMode: 'mute', referenceAudios: [voice] });
+  assert.equal(muted.input.settings.generateAudio, false);
+  assert.deepEqual(muted.input.assets.referenceAudios, []);
+  assert.equal(muted.editorSnapshot.recreationMuted.storyboard, true);
+  assert.throws(() => buildTask({ ...config, mode: 'storyboard', outputAudioMode: 'source' }));
 });
 test('new request persists before POST and resumes without another parent', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'recreation-parity-')), file = join(dir, 'state.json');
@@ -55,7 +75,9 @@ test('new request persists before POST and resumes without another parent', asyn
     return { id, status: 'Running' };
   }, async task() { return { id, status: 'Succeeded', output: { video: { url: 'https://assets.example/final.mp4' } } }; } };
   try {
-    await submit(config, file, client); await submit(config, file, client);
+    await assert.rejects(submit(config, file, client, { maxCredits: 9 }), /exceeds the approved credits/);
+    assert.equal(posts, 0);
+    await submit(config, file, client, { maxCredits: 10 }); await submit(config, file, client);
     assert.equal((await poll(file, client, { maxPolls: 1 })).status, 'Succeeded');
     assert.equal(posts, 1);
   } finally { await rm(dir, { recursive: true, force: true }); }
