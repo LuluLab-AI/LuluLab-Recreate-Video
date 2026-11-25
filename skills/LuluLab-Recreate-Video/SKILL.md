@@ -1,7 +1,7 @@
 ---
 name: LuluLab-Recreate-Video
 slug: lululab-recreate-video
-version: 1.5.3
+version: 1.5.4
 displayName: LuluLab 视频复刻
 summary: Recreate commerce videos through LuluLab Dispatcher tasks.
 homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
@@ -10,14 +10,14 @@ license: Apache-2.0
 metadata:
   skillhub:
     slug: lululab-recreate-video
-    version: 1.5.3
+    version: 1.5.4
     displayName: LuluLab 视频复刻
     summary: Submit and resume frontend-compatible video recreation tasks.
     tags: [视频复刻, 爆款视频, 电商广告, AI视频]
     homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# LuluLab-Recreate-Video v1.5.3
+# LuluLab-Recreate-Video v1.5.4
 
 ## Default execution: Dispatcher parent task
 
@@ -44,7 +44,7 @@ Translate confirmation examples into the interaction language, including “Esti
 
 Keep generated prompts verbatim for submission. If useful, provide a separately labeled explanation or translation in the interaction language without replacing the original prompt. Preserve the user's original creative requirements. These rules also apply to legacy and prompt-only paths; older references that force Chinese for zh locales and English for all other locales must not override them.
 
-Collect the source video and requested changes; accept optional product, person, background and voice references. Source duration must be measured, 4–60 seconds. Use FFprobe for local video rather than guessing. Require Node.js >=20 and LuluLab credentials (`LULULAB_API_KEY` or existing private `~/.recreate-video-lululab/config.json`). If the key is missing or invalid, guide the user in the interaction language to https://www.lululab.ai/workshop/keys to obtain an API Key and configure `LULULAB_API_KEY` securely on their device. Do not ask the user to paste a key in chat, and do not repeat the guidance when a valid key is already configured. Do not print/store API keys or pass them in command arguments.
+Collect the source video and requested changes; accept optional product, person, background and voice references. Source duration must be measured, 4–60 seconds. Use FFprobe for local video rather than guessing. Require Node.js >=20 and LuluLab credentials (`LULULAB_API_KEY` or existing private `~/.recreate-video-lululab/config.json`). If a standalone API step needs a key and the key is missing or invalid, tell the user in the conversation language to sign in at [LuluLab API Keys](https://www.lululab.ai/workshop/keys), get an API key, and configure `LULULAB_API_KEY` securely on their device. Share the same link if the user asks where to get a key. Never ask them to paste a key in chat. Skip unsolicited reminders when a valid key is already configured. Do not print/store API keys or pass them in command arguments.
 
 Read [the Dispatcher contract and request example](references/DISPATCHER_RECREATION.md) before preparing input. `plan` is offline. The server remains authoritative for model availability, billing, Asset ownership and actual source duration.
 
