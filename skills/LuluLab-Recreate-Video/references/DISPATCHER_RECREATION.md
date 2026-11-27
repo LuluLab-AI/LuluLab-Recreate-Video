@@ -19,7 +19,7 @@ node scripts/dispatcher_recreate.mjs download --state /absolute/task-state.json 
 
 ## Request JSON
 
-Replace sample file objects with actual uploaded results. `sourceDuration` must come from the actual source. File IDs must belong to the authenticating account.
+The sample illustrates a user-selected motion-guided request. Every new request must include the user-selected `mode` (`storyboard`, `deep`, or `element_replace`). Apply explicit choices and the defaults in [SKILL.md](../SKILL.md) before estimating. Replace sample file objects with actual uploaded results. `sourceDuration` must come from the actual source. File IDs must belong to the authenticating account.
 
 ```json
 {
@@ -48,9 +48,9 @@ Image and audio arrays contain uploaded file objects with `url`, `mimeType`, and
 
 For new requests use `outputAudioMode`. Motion-guided defaults to `source` and writes this field to the workflow input. Storyboard defaults to `generate` and writes `settings.generateAudio`. Both record the chosen mode and mute state in the editor snapshot. Only `generate` forwards the optional single voice reference. A retained draft voice reference is omitted from the workflow input when muted or preserving the original track. Explicit legacy `generateAudio` values still map to `generate` or `mute` when no mode is supplied. An intentionally supplied voice reference with neither setting selects `generate`.
 
-The default for storyboard and motion-guided recreation is Seedance 2.5 Flash, 480p, 9:16. For deep and element replacement, keep market and language requirements in `requirement`. Storyboard also accepts `targetCountry` and `targetLanguage`.
+For deep and element replacement, keep market and language requirements in `requirement`. Storyboard also accepts `targetCountry` and `targetLanguage`.
 
-Seedance 2.5 Flash (`seedance-2-5-flash`) supports 480p and 720p. Wan 3 uses 720p in this adapter. Source videos can be 4–60 seconds. The per-segment model limit is 15 seconds for the Seedance 2.0 models and 30 seconds for Seedance 2.5 Flash, Seedance 2.5 and Wan 3. For supported Seedance 2.5 edit requests the adapter sends `adaptive` and keeps the selected ratio separately for deep recreation.
+Element replacement supports Seedance 2.5 Flash (`seedance-2-5-flash`), Seedance 2.5 (`seedance-2-5`), and Wan 3 (`wan-3`). Seedance 2.5 Flash supports 480p and 720p. Wan 3 uses 720p in this adapter. Source videos can be 4–60 seconds. The per-segment model limit is 15 seconds for the Seedance 2.0 models and 30 seconds for Seedance 2.5 Flash, Seedance 2.5 and Wan 3, with a 15-second per-segment limit for Wan 3 element replacement. For motion-guided recreation and element replacement with either Seedance 2.5 model, the adapter sends `adaptive` and keeps the selected ratio separately for motion-guided recreation.
 
 The default API base is `https://customer.lululab.ai`; `LULULAB_API_BASE_URL` may override the service root. Server releases must already include the selected parent task worker and workflow registration. This skill change does not deploy backend services or modify n8n workflows.
 

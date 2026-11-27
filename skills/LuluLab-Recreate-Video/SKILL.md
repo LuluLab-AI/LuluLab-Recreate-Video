@@ -1,7 +1,7 @@
 ---
 name: LuluLab-Recreate-Video
 slug: lululab-recreate-video
-version: 1.6.0
+version: 1.6.1
 displayName: LuluLab 视频复刻
 summary: Recreate commerce videos through LuluLab Dispatcher tasks.
 homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
@@ -10,20 +10,20 @@ license: Apache-2.0
 metadata:
   skillhub:
     slug: lululab-recreate-video
-    version: 1.6.0
+    version: 1.6.1
     displayName: LuluLab 视频复刻
     summary: Submit and resume frontend-compatible video recreation tasks.
     tags: [视频复刻, 爆款视频, 电商广告, AI视频]
     homepage: https://github.com/LuluLab-AI/LuluLab-Recreate-Video
 ---
 
-# LuluLab-Recreate-Video v1.6.0
+# LuluLab-Recreate-Video v1.6.1
 
 ## LuluLab canvas host
 
-When the host provides `prepare_recreation`, use the [canvas host contract](hosts/lululab/canvas-recreation/SKILL.md). Call the tool to start this skill with the user's verified attachments and creative brief. The website provides account authorization, the approval card, durable task state and delivery back to the canvas. Use the website's approval interaction and task status. The standalone commands below apply to externally installed agents.
+When the host provides `prepare_recreation`, use the [canvas host contract](hosts/lululab/canvas-recreation/SKILL.md) with verified attachments and the creative brief. The website provides account authorization, the approval card, durable task state and delivery back to the canvas. Use the website's approval interaction and task status. The standalone commands below apply to externally installed agents.
 
-Use the canvas approval card as the single confirmation. Show the resolved person, audio and credit estimate in that card without asking for a separate chat confirmation.
+Use the canvas approval card for paid generation approval. Present the current configuration, available options and credit estimate as described below.
 
 ## Default execution: Dispatcher parent task
 
@@ -32,14 +32,14 @@ Use `scripts/dispatcher_recreate.mjs` for new full-video tasks. Submit one paren
 Modes:
 - `storyboard` → `StoryboardRecreationV1`, with `storyboardPipelineVersion=2`.
 - `deep` → `DeepRecreationV1`, with `deepPipelineVersion=2` and `deepPresentationVersion=1`.
-- `element_replace` → `ElementReplacementV1`.
+- `element_replace` → `ElementReplacementV1`. Model choices are Seedance 2.5 Flash (`seedance-2-5-flash`), Seedance 2.5, and Wan 3.
 
-Use the requested mode, or default to motion-guided recreation. For both modes, default to Seedance 2.5 Flash, 480p, and 9:16 when the user leaves output settings open. The parent task follows the source duration. Keep the explicit source video and any selected references.
+Use the mode the user explicitly chooses. The parent task follows the source duration. Keep the explicit source video and any selected references.
 
 | Mode | Person | Audio |
 | --- | --- | --- |
 | 分镜复刻 / Storyboard | AI 新人物 (default), 上传指定人物, 沿用原片人物 | AI 生成声音 (default) or 静音. One optional voice reference for generated audio |
-| 动作模仿 / Motion-guided | AI 新人物 (default), 上传指定人物, 沿用原片人物 | 保留原片声音 (default), AI 生成声音, or 静音. One optional voice reference for generated audio |
+| 动作模仿 / Motion-guided | AI 新人物 (default), 上传指定人物, 沿用原片人物 | 保留原片声音 (default when an audio track exists), AI 生成声音, or 静音. One optional voice reference for generated audio |
 
 Set `creatorMode` to `ai_generated`, `user_provided` or `keep_source`. Dedicated person photos supplied for a person replacement select `user_provided`. A generic image attachment does not by itself identify a person reference. Preserve the original product and background unless a replacement is requested. Set `outputAudioMode` explicitly to `source`, `generate` or `mute` for new configurations. In motion-guided mode, `source` extracts and restores the original track. Voice references apply to `generate` only.
 
@@ -49,7 +49,7 @@ Treat interaction language, target market and output language independently. Cho
 
 Use the interaction language for every user-facing message: input collection, configuration labels and choices, defaults, estimated credits and billing breakdown, confirmation, progress, errors, recovery and delivery. Translate human-readable server status and billing labels while preserving credit amounts, model/workflow/task IDs, commands, paths and JSON field names. Explain raw CLI output in the interaction language instead of presenting English diagnostics as the final response.
 
-Show output language separately in the configuration. Preserve explicit mode, model, country, language, image and audio choices. Otherwise retain this skill's source-language defaults for the pending confirmation. Never infer the target market or overwrite output language from the conversation language. Speech, captions and copy (where supported by the selected workflow) follow the requested output language, including regional or multilingual requirements. If the selected source has no audio track, surface that before quoting original audio and ask whether to generate audio or mute; do not silently substitute Chinese or English or promise unverified language quality.
+Show output language separately from target market in the configuration. Each follows the source when unspecified. Never infer either from the conversation language. Speech, captions and copy (where supported by the selected workflow) follow the requested output language, including regional or multilingual requirements. If the source has no audio track, use mute for an unspecified motion-guided audio setting and disclose it with the estimate. If the user explicitly requested original audio, explain that the source has no track and ask whether to generate audio or mute before quoting. Do not silently substitute Chinese or English or promise unverified language quality.
 
 Pass `interactionLocale` explicitly in the local configuration. Storyboard mode sends it and `targetCountry`/`targetLanguage` in dedicated fields. Deep/element replacement keep country and output-language requests verbatim in `requirement`, matching the existing frontend contract; do not invent unsupported locale fields in their workflow input. Local explanations still follow the interaction language in every mode.
 
@@ -63,11 +63,23 @@ All three recreation modes use the website's video reference image rule for ever
 
 Read [the Dispatcher contract and request example](references/DISPATCHER_RECREATION.md) before preparing input. `plan` is offline. The server remains authoritative for model availability, billing, Asset ownership and actual source duration.
 
-## One confirmation for the full request
+## Collect essentials, then confirm with the estimate
 
-Use explicit choices and fill in optional settings with the defaults. Ask one grouped question only for missing required input, unsupported choices, or genuinely ambiguous asset roles. When the source and roles are clear, prepare the exact request and estimate credits without a preliminary settings confirmation.
+Keep the first reply short. Request a source only if missing, offer mode choices only if unclear, and invite the user to mention any intended changes or attach relevant references. A specific editing request can establish the mode. Ask a targeted follow-up only when an essential input is missing, an asset's role is needed to perform a requested change, or an explicit choice cannot be applied. A request with no changes specified can use the defaults, except element replacement needs a replacement target.
 
-For standalone use, show the resolved settings and live estimate together in one short message. Include the source duration, mode, person, audio, requested changes, model and price. Ask once to generate when authorization is still needed. An explicit instruction to start within a stated credit limit already covers an unchanged request within that limit. For the canvas, use its approval card and omit a second approval in chat.
+For a bare “复刻视频” with no attachment, use wording like “请发参考视频（文件或链接），并选分镜复刻（跟镜头和节奏）、动作模仿（跟人物动作）或元素替换（换指定内容）。有想改的地方一起告诉我。” List only modes supported by the host.
+
+Carry forward explicit choices and fill the remaining settings before estimating. Use the person and audio defaults above, with generated audio if the user asks to use a voice reference. Default to Seedance 2.5 Flash, 480p and 9:16 for storyboard and motion-guided recreation. For element replacement, use Seedance 2.5, 720p, 9:16 and generated audio by default. For an explicit model choice, use output defaults it supports and clarify any incompatible explicit setting. Proceed to estimate once the source, mode and any essential replacement details are available.
+
+Once the source, mode and required references are resolved, show the current configuration and available options together in the first approval and again after any change. In standalone chat, use one three-column Markdown table. Use these exact column headings in Chinese and translate them and the option names into the interaction language when replying in another language.
+
+| 项目 | 当前配置项 | 可选配置项 |
+|---|---|---|
+| … | … | … |
+
+Use a separate row for the source video, measured duration, recreation mode, model, resolution, aspect ratio, product, person, background, audio, target market, output language, and other requirements. Show the chosen value and any reference file and its role in the middle column. In the right column, list concrete choices for that row or describe its constraint, such as duration following the source. Include every supported mode and model for the current configuration, the resolutions and aspect ratios for the current model, any required reference files or setting changes, and how to edit free-text fields. Base the choices on the current host and applicable workflow and model constraints. For standalone model and output settings, use `scripts/recreation_task.mjs` and the Dispatcher contract, with the server authoritative for availability. Filter choices by the supplied references and source capabilities, or state what needs to change to make a choice available.
+
+In standalone chat, put the live credit estimate and short billing breakdown for the current configuration below the table. End with “Reply 1 to start with the current settings or 2 to change them. You can also name the setting and value directly.” When the user changes a setting, preserve their other choices where compatible, resolve any dependencies, and obtain a fresh estimate and confirmation for the revised configuration. An explicit instruction to start within a stated credit limit already covers an unchanged request within that limit. On canvas, use the approval card for confirmation.
 
 Run `estimate --config request.json` before a paid submit. Use the approved limit or quoted amount as `--max-credits` with `--generation-approved`. If the live quote exceeds that amount or the billable scope changes, obtain approval only for the new scope or price. Polling, downloads and normal server-managed stages reuse the original task and approval.
 
@@ -77,7 +89,7 @@ One full-video parent reserves its complete quoted scope before its segments run
 
 ## Execution and recovery
 
-1. Upload local source and reference files with `dispatcher_recreate.mjs upload`; retain the returned Asset ID, URL, MIME type and expiry in request JSON. The source requires the owned temporary file ID, not an asset-library record ID. A public URL alone is insufficient for server-side media processing. If the user supplied only a URL, obtain the source file through the existing authorized download path and upload it, or use its existing owned file object.
+1. Resolve the configuration as above. Then upload local source and reference files with `dispatcher_recreate.mjs upload`; retain the returned Asset ID, URL, MIME type and expiry in request JSON. The source requires the owned temporary file ID, not an asset-library record ID. A public URL alone is insufficient for server-side media processing. If the user supplied only a URL, obtain the source file through the existing authorized download path and upload it, or use its existing owned file object.
 2. Build the request, run `plan`, then query `estimate --config ...`. Use the combined approval flow above.
 3. Run `submit --generation-approved --max-credits <approved-total>` once with a dedicated `--state` file. The script quotes before submission, checkpoints before the task POST, and saves the returned parent task ID immediately.
 4. Run `poll --state ...`, reporting actual server stages. If the polling window ends while pending, continue polling the same state; never submit again. Dispatcher continues even when the local client stops. On resume, poll the saved parent ID first; if the saved final file exists, deliver it directly.

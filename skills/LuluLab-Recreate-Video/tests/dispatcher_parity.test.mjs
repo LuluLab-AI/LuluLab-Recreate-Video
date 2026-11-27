@@ -7,7 +7,10 @@ import { buildTask, submit, poll } from '../scripts/dispatcher_recreate.mjs';
 const id = '11111111-1111-4111-8111-111111111111';
 const source = { id, url: 'https://assets.example/source.mp4', mimeType: 'video/mp4' };
 const image = { id, url: 'https://assets.example/image.png', mimeType: 'image/png' };
-const config = { source, sourceDuration: 12.4 };
+const config = { mode: 'deep', source, sourceDuration: 12.4 };
+test('a recreation request without a selected mode is rejected', () => {
+  assert.throws(() => buildTask({ source, sourceDuration: 12.4 }), /Choose a recreation mode explicitly/);
+});
 test('website defaults and explicit creator selection reach the server and history', () => {
   const task = buildTask(config);
   assert.equal(task.workflowId, 'DeepRecreationV1');

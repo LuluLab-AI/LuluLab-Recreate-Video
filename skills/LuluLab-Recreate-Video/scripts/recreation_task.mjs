@@ -1,7 +1,7 @@
 /** Offline Dispatcher task builder shared by both Skill hosts. */
 export const WORKFLOWS = { storyboard: 'StoryboardRecreationV1', deep: 'DeepRecreationV1', element_replace: 'ElementReplacementV1' };
 const deepModels = ['seedance-2-mini', 'seedance-2-fast', 'seedance-2-5-flash', 'seedance-2', 'seedance-2-5', 'wan-3'];
-const models = { storyboard: [...deepModels, 'grok-imagine-1-5-preview'], deep: deepModels, element_replace: ['seedance-2-5', 'wan-3'] };
+const models = { storyboard: [...deepModels, 'grok-imagine-1-5-preview'], deep: deepModels, element_replace: ['seedance-2-5-flash', 'seedance-2-5', 'wan-3'] };
 export function validateVideoSettings(mode, { model, resolution, aspectRatio, generateAudio }) {
   if (!models[mode]?.includes(model)) throw Error('Unsupported model for the selected recreation mode.');
   const ratios = model === 'grok-imagine-1-5-preview' ? ['16:9', '9:16', '1:1'] : model === 'wan-3' ? ['9:16', '16:9', '1:1', '3:4', '4:3'] : ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
@@ -51,8 +51,8 @@ export function resolveAudioMode(mode, { outputAudioMode, generateAudio }, hasVo
 export function buildTask(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw Error('Request must be a JSON object.');
   if (config.promptOnly || config.executionMode === 'prompt-only') throw Error('Prompt-only requests must use the legacy export path, not a paid Dispatcher parent.');
-  const mode = config.mode ?? 'deep';
-  if (!Object.hasOwn(WORKFLOWS, mode)) throw Error('mode must be storyboard, deep or element_replace.');
+  const mode = config.mode;
+  if (!Object.hasOwn(WORKFLOWS, mode)) throw Error('Choose a recreation mode explicitly: storyboard, deep or element_replace.');
   const model = config.model ?? (mode === 'element_replace' ? 'seedance-2-5' : 'seedance-2-5-flash');
   const duration = config.sourceDuration;
   if (!Number.isFinite(duration) || duration < 4 || duration > 60) throw Error('sourceDuration must be the measured source duration, 4–60 seconds.');
